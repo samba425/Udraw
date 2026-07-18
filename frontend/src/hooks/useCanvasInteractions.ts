@@ -25,6 +25,8 @@ import { computeSnap, type SmartGuide } from '@/engine/snapping/snap';
 import { isShapeLocked, layerMap } from '@/models/layers';
 import { collectMovable, topAncestor } from '@/models/group';
 import { useHistory } from './useHistory';
+import { openHyperlink } from '@/utils/links';
+import { applyFormatToShapes } from '@/engine/commands/formatPainter';
 
 /** Tools that create a shape by click-drag. */
 const CREATE_TOOLS: Partial<Record<ToolId, ShapeKind>> = {
@@ -65,6 +67,7 @@ export interface InteractionOverlays {
   setGuides: (guides: SmartGuide[]) => void;
   setPenPreview: (points: Point[] | null) => void;
   setConnectTargetId: (shapeId: string | null) => void;
+  readOnly?: boolean;
 }
 
 /** Public API returned to the Canvas component. */
@@ -91,7 +94,7 @@ export function useCanvasInteractions(
   svgRef: RefObject<SVGSVGElement | null>,
   overlays: InteractionOverlays,
 ): CanvasInteractions {
-  const { setMarquee, setConnectPreview, setGuides, setPenPreview, setConnectTargetId } = overlays;
+  const { setMarquee, setConnectPreview, setGuides, setPenPreview, setConnectTargetId, readOnly = false } = overlays;
   const interaction = useRef<Interaction>({ mode: 'idle' });
   const listening = useRef(false);
   const history = useHistory();
@@ -393,6 +396,16 @@ export function useCanvasInteractions(
       const world = clientToWorld(event.clientX, event.clientY);
       lastPointer.current = world;
 
+      if (readOnly) {
+        interaction.current = {
+          mode: 'pan',
+          startClient: { x: event.clientX, y: event.clientY },
+          startCamera: { x: editor.camera.x, y: editor.camera.y },
+        };
+        startListening();
+        return;
+      }
+
       if (editor.tool === 'pan' || event.button === 1) {
         interaction.current = {
           mode: 'pan',
@@ -470,7 +483,7 @@ export function useCanvasInteractions(
       setMarquee(start);
       startListening();
     },
-    [clientToWorld, history, setConnectPreview, setMarquee, setPenPreview, startListening],
+    [clientToWorld, history, readOnly, setConnectPreview, setMarquee, setPenPreview, startListening],
   );
 
   const onShapePointerDown = useCallback(
@@ -483,6 +496,19 @@ export function useCanvasInteractions(
       if (!shape) return;
 
       lastPointer.current = clientToWorld(event.clientX, event.clientY);
+
+      if ((event.metaKey || event.ctrlKey) && shape.hyperlink?.trim()) {
+        openHyperlink(shape.hyperlink);
+        return;
+      }
+
+      if (readOnly) return;
+
+      if (editor.formatPainterActive && editor.formatPainterStyle) {
+        const targetId = topAncestor(page, shapeId);
+        applyFormatToShapes([targetId]);
+        return;
+      }
 
       // Eraser: delete the shape under the pointer and keep erasing on drag.
       if (editor.tool === 'eraser') {
@@ -537,7 +563,7 @@ export function useCanvasInteractions(
       history.begin();
       startListening();
     },
-    [clientToWorld, history, setConnectPreview, setPenPreview, startListening],
+    [clientToWorld, history, readOnly, setConnectPreview, setPenPreview, startListening],
   );
 
   const onEdgePointerDown = useCallback((event: React.PointerEvent, edgeId: string) => {

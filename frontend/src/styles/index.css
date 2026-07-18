@@ -10,7 +10,8 @@
 }
 
 :root,
-[data-theme='light'] {
+[data-theme='light'],
+.diagramforge-root[data-theme='light'] {
   --color-bg: #f7f8fa;
   --color-surface: #ffffff;
   --color-surface-alt: #f1f3f5;
@@ -25,7 +26,8 @@
   --color-selection: #6366f1;
 }
 
-[data-theme='dark'] {
+[data-theme='dark'],
+.diagramforge-root[data-theme='dark'] {
   --color-bg: #0f1115;
   --color-surface: #171a21;
   --color-surface-alt: #1e222b;
@@ -38,6 +40,13 @@
   --color-grid: #232833;
   --color-grid-strong: #2e3440;
   --color-selection: #818cf8;
+}
+
+.diagramforge-root {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  background-color: var(--color-bg);
+  color: var(--color-text);
 }
 
 html,

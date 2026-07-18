@@ -44,6 +44,8 @@ export function geometryForKind(
     case 'image':
     case 'icon':
     case 'group':
+    case 'swimlane-pool':
+    case 'swimlane-lane':
       return { type: 'rect', rx: 0 };
     case 'rounded-rectangle':
       return { type: 'rect', rx: Math.min(cornerRadius || 12, w / 2, h / 2) };

@@ -9,6 +9,14 @@ optional backend adds AI diagram generation and project sync.
 
 ---
 
+## Live demo
+
+**https://samba425.github.io/Udraw/**
+
+Deployed automatically from `main` via GitHub Actions (see `.github/workflows/deploy-pages.yml`).
+
+---
+
 ## Features
 
 - **Infinite SVG canvas** with pan, wheel-zoom, grid, and snap.
@@ -25,10 +33,18 @@ optional backend adds AI diagram generation and project sync.
 - **Clipboard**: copy, cut, paste (with offset), and duplicate.
 - **Tools**: pointer, hand, shapes, connector, text, sticky note, comment,
   pen (freehand), eraser, and image import.
-- **Import / export**: PNG, SVG, PDF, JSON, and ZIP project export; JSON, SVG,
-  PNG image import, and a hardened (XXE-safe) draw.io XML importer.
+- **Import / export**: PNG, SVG, PDF, JSON, ZIP, and Mermaid; JSON, SVG,
+  PNG image, draw.io XML, Mermaid, and PlantUML import.
+- **Source editor**: canvas, split, and source-only views with JSON, YAML, and
+  Mermaid DSL sync.
+- **Share via URL**: `#d=` editable and `#dv=` view-only links (no server).
+- **Templates & welcome**: flowchart, AWS, org chart, and retro starters.
+- **Presentation mode**: F5 fullscreen slideshow through pages.
+- **Format painter**, **hyperlinks**, and **swimlanes**.
+- **Auto layout**: hierarchical layout for flowcharts and imports.
 - **Persistence**: autosave to IndexedDB every 3s with crash recovery, plus
   Save As.
+- **PWA**: installable offline app with service worker (production build).
 - **Minimap** and **in-diagram search**.
 - **Themes**: light / dark / system via CSS variables.
 - **Plugin system**: register shapes, menus, toolbar items, exporters,
@@ -172,6 +188,8 @@ cd frontend && npm run test:e2e
 
 ## Documentation
 
+- **[Embed package](docs/embed-package.md)** — use DiagramForge in other React apps (`@diagramforge/react`)
+- **[Developer guide](docs/developer-guide.md)** — full feature catalog, stack, architecture, and how everything works
 - [Architecture](docs/architecture.md)
 - [Folder structure](docs/folder-structure.md)
 - [State management](docs/state-management.md)

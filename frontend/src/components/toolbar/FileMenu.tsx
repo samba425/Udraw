@@ -12,7 +12,7 @@ import { useEditorStore } from '@/state/editorStore';
 import { createProject } from '@/models/factory';
 import { pluginManager } from '@/plugins/registry';
 import { exportWithPlugin } from '@/services/export';
-import { copyShareLink } from '@/services/share/urlShare';
+import { copyShareLink, copyViewOnlyShareLink } from '@/services/share/urlShare';
 
 interface MenuItem {
   label: string;
@@ -67,6 +67,15 @@ export function FileMenu(): React.JSX.Element {
       action: () => {
         void copyShareLink(project)
           .then(() => editorBus.emit('toast', { message: 'Share link copied.', kind: 'success' }))
+          .catch(() => editorBus.emit('toast', { message: 'Could not copy link.', kind: 'error' }));
+      },
+    },
+    {
+      label: 'Copy view-only link',
+      icon: Link2,
+      action: () => {
+        void copyViewOnlyShareLink(project)
+          .then(() => editorBus.emit('toast', { message: 'View-only link copied.', kind: 'success' }))
           .catch(() => editorBus.emit('toast', { message: 'Could not copy link.', kind: 'error' }));
       },
     },

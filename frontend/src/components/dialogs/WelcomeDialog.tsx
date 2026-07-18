@@ -12,6 +12,7 @@ import { useProjectStore } from '@/state/projectStore';
 import { useHistoryStore } from '@/state/historyStore';
 import { createProject } from '@/models/factory';
 import { editorBus } from '@/utils/eventBus';
+import { isFeatureEnabled } from '@/lib/runtimeConfig';
 
 const SESSION_KEY = 'diagramforge.welcomeShown';
 
@@ -159,8 +160,9 @@ export function WelcomeDialog(): React.JSX.Element | null {
 export function useWelcomeOnStartup(): void {
   const setOpen = useEditorStore((s) => s.setWelcomeOpen);
   useEffect(() => {
+    if (!isFeatureEnabled('welcome')) return;
     if (sessionStorage.getItem(SESSION_KEY)) return;
-    if (window.location.hash.startsWith('#d=')) return;
+    if (window.location.hash.startsWith('#d=') || window.location.hash.startsWith('#dv=')) return;
     const t = setTimeout(() => setOpen(true), 400);
     return () => clearTimeout(t);
   }, [setOpen]);

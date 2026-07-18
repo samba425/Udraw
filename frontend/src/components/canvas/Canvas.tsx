@@ -38,7 +38,7 @@ import { EndpointOverlay } from './EndpointOverlay';
 const CULL_THRESHOLD = 300;
 
 /** Root canvas surface. */
-export function Canvas(): React.JSX.Element {
+export function Canvas({ readOnly: readOnlyOverride }: { readOnly?: boolean } = {}): React.JSX.Element {
   const svgRef = useRef<SVGSVGElement>(null);
   const [marquee, setMarquee] = useState<Rect | null>(null);
   const [connectPreview, setConnectPreview] = useState<ConnectPreview | null>(null);
@@ -51,6 +51,8 @@ export function Canvas(): React.JSX.Element {
   const tool = useEditorStore((s) => s.tool);
   const hoveredShapeId = useEditorStore((s) => s.hoveredShapeId);
   const connectTargetId = useEditorStore((s) => s.connectTargetId);
+  const readOnlyStore = useEditorStore((s) => s.readOnly);
+  const readOnly = readOnlyOverride ?? readOnlyStore;
   const setHoveredShapeId = useEditorStore((s) => s.setHoveredShapeId);
   const setEditingText = useEditorStore((s) => s.setEditingText);
   const zoomBy = useEditorStore((s) => s.zoomBy);
@@ -65,6 +67,7 @@ export function Canvas(): React.JSX.Element {
     setGuides,
     setPenPreview,
     setConnectTargetId: useEditorStore.getState().setConnectTargetId,
+    readOnly,
   });
   const selectedSet = new Set(selectedIds);
   const layers = layerMap(page);
@@ -192,7 +195,15 @@ export function Canvas(): React.JSX.Element {
     .filter((s): s is NonNullable<typeof s> => Boolean(s));
   const selectedEdge = selectedIds.length === 1 ? page.edges[selectedIds[0]!] : undefined;
 
-  const cursor = tool === 'pan' ? 'grab' : tool === 'select' ? 'default' : 'crosshair';
+  const cursor = readOnly
+    ? tool === 'pan'
+      ? 'grab'
+      : 'default'
+    : tool === 'pan'
+      ? 'grab'
+      : tool === 'select'
+        ? 'default'
+        : 'crosshair';
 
   return (
     <svg

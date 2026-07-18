@@ -5,6 +5,8 @@
  */
 import { create } from 'zustand';
 import type { Camera, Point, Rect, Size, ThemeMode, ToolId } from '@/types';
+import type { ShapeStylePatch } from '@/engine/commands/formatPainter';
+import type { SourceFormat } from '@/services/sourceEditor';
 import { clamp, worldToScreen } from '@/utils/geometry';
 import { editorBus } from '@/utils/eventBus';
 
@@ -27,6 +29,13 @@ interface EditorState {
   welcomeOpen: boolean;
   hoveredShapeId: string | null;
   connectTargetId: string | null;
+  readOnly: boolean;
+  presentationOpen: boolean;
+  presentationIndex: number;
+  formatPainterActive: boolean;
+  formatPainterStyle: ShapeStylePatch | null;
+  viewMode: 'canvas' | 'source' | 'split';
+  sourceFormat: SourceFormat;
 
   setTool: (tool: ToolId) => void;
   setCamera: (camera: Camera) => void;
@@ -56,6 +65,13 @@ interface EditorState {
   setWelcomeOpen: (open: boolean) => void;
   setHoveredShapeId: (id: string | null) => void;
   setConnectTargetId: (id: string | null) => void;
+  setReadOnly: (readOnly: boolean) => void;
+  setPresentationOpen: (open: boolean) => void;
+  setPresentationIndex: (index: number) => void;
+  setFormatPainterActive: (active: boolean) => void;
+  setFormatPainterStyle: (style: ShapeStylePatch | null) => void;
+  setViewMode: (mode: 'canvas' | 'source' | 'split') => void;
+  setSourceFormat: (format: SourceFormat) => void;
 }
 
 /** Zustand store for ephemeral editor/UI state. */
@@ -75,6 +91,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   welcomeOpen: false,
   hoveredShapeId: null,
   connectTargetId: null,
+  readOnly: false,
+  presentationOpen: false,
+  presentationIndex: 0,
+  formatPainterActive: false,
+  formatPainterStyle: null,
+  viewMode: 'canvas',
+  sourceFormat: 'json',
 
   setTool: (tool) => set({ tool }),
   setCamera: (camera) => set({ camera }),
@@ -158,6 +181,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setWelcomeOpen: (open) => set({ welcomeOpen: open }),
   setHoveredShapeId: (id) => set({ hoveredShapeId: id }),
   setConnectTargetId: (id) => set({ connectTargetId: id }),
+  setReadOnly: (readOnly) => set({ readOnly }),
+  setPresentationOpen: (open) => set({ presentationOpen: open }),
+  setPresentationIndex: (index) => set({ presentationIndex: index }),
+  setFormatPainterActive: (active) => set({ formatPainterActive: active }),
+  setFormatPainterStyle: (style) => set({ formatPainterStyle: style }),
+  setViewMode: (mode) => set({ viewMode: mode }),
+  setSourceFormat: (format) => set({ sourceFormat: format }),
 }));
 
 /** Recompute the camera so a zoom keeps the pivot point fixed on screen. */

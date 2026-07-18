@@ -36,6 +36,7 @@ export const ShapeView = memo(function ShapeView({
   const fill = resolveFill(shape.fill, gradientId);
   const dash = dashArray(shape.dash, shape.strokeWidth);
   const hasShadow = shape.shadow.enabled;
+  const hasLink = Boolean(shape.hyperlink?.trim());
 
   const commonProps = {
     fill,
@@ -49,7 +50,9 @@ export const ShapeView = memo(function ShapeView({
     <g
       transform={`translate(${shape.x} ${shape.y}) rotate(${shape.rotation} ${shape.width / 2} ${shape.height / 2})`}
       opacity={shape.opacity}
-      style={{ cursor: shape.locked ? 'default' : 'move' }}
+      style={{
+        cursor: shape.locked ? 'default' : hasLink ? 'pointer' : 'move',
+      }}
       onPointerDown={(e) => onPointerDown(e, shape.id)}
       onPointerEnter={() => onPointerEnter?.(shape.id)}
       onPointerLeave={() => onPointerLeave?.(shape.id)}
@@ -105,6 +108,31 @@ export const ShapeView = memo(function ShapeView({
             strokeLinejoin="round"
             filter={hasShadow ? `url(#${filterId})` : undefined}
           />
+        ) : shape.kind === 'swimlane-pool' ? (
+          <>
+            <rect width={shape.width} height={shape.height} {...commonProps} />
+            <rect width={shape.width} height={36} fill="#e2e8f0" stroke={shape.stroke} strokeWidth={shape.strokeWidth} />
+            <line x1={0} y1={36} x2={shape.width} y2={36} stroke={shape.stroke} strokeWidth={shape.strokeWidth} />
+          </>
+        ) : shape.kind === 'swimlane-lane' ? (
+          <>
+            <rect width={shape.width} height={shape.height} {...commonProps} />
+            <rect
+              width={Number(shape.metadata.laneHeader ?? 120)}
+              height={shape.height}
+              fill="#e2e8f0"
+              stroke={shape.stroke}
+              strokeWidth={shape.strokeWidth}
+            />
+            <line
+              x1={Number(shape.metadata.laneHeader ?? 120)}
+              y1={0}
+              x2={Number(shape.metadata.laneHeader ?? 120)}
+              y2={shape.height}
+              stroke={shape.stroke}
+              strokeWidth={shape.strokeWidth}
+            />
+          </>
         ) : geom.type === 'rect' ? (
           <rect width={shape.width} height={shape.height} rx={geom.rx} ry={geom.rx} {...commonProps} />
         ) : geom.type === 'ellipse' ? (
@@ -121,6 +149,19 @@ export const ShapeView = memo(function ShapeView({
       </g>
 
       {shape.text && <ShapeLabel shape={shape} />}
+
+      {hasLink && (
+        <g transform={`translate(${shape.width - 14} 8)`} pointerEvents="none">
+          <circle r={6} fill="var(--color-accent)" />
+          <path
+            d="M -2.5 1.5 L 1.5 -2.5 M -0.5 -2.5 h2 v2"
+            stroke="#fff"
+            strokeWidth={1.2}
+            fill="none"
+            strokeLinecap="round"
+          />
+        </g>
+      )}
 
       {selected && (
         <rect

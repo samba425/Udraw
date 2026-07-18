@@ -27,7 +27,9 @@ export type ShapeKind =
   | 'freehand'
   | 'image'
   | 'icon'
-  | 'group';
+  | 'group'
+  | 'swimlane-pool'
+  | 'swimlane-lane';
 
 /** Metadata is an open key/value bag stored per shape. */
 export type ShapeMetadata = Record<string, string | number | boolean | null>;
@@ -69,6 +71,8 @@ export interface Shape {
    */
   points?: Array<{ x: number; y: number }>;
   metadata: ShapeMetadata;
+  /** Optional URL opened on Ctrl+Click (or from the property panel). */
+  hyperlink?: string;
 }
 
 /** A subset used when creating shapes; the store fills in defaults. */

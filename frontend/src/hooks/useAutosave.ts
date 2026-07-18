@@ -6,7 +6,9 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { useProjectStore } from '@/state/projectStore';
+import { useEditorStore } from '@/state/editorStore';
 import { loadLastProject, saveProject } from '@/services/storage/db';
+import { isFeatureEnabled } from '@/lib/runtimeConfig';
 
 const AUTOSAVE_DELAY_MS = 3000;
 
@@ -19,9 +21,13 @@ export function useAutosave(): SaveStatus {
   const restored = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Restore the last project once on startup (skip if a share URL already loaded).
+  // Restore the last project once on startup (skip if persistence disabled or share URL loaded).
   useEffect(() => {
-    if (window.location.hash.startsWith('#d=')) {
+    if (!isFeatureEnabled('persistence')) {
+      restored.current = true;
+      return;
+    }
+    if (window.location.hash.startsWith('#d=') || window.location.hash.startsWith('#dv=')) {
       restored.current = true;
       return;
     }
@@ -43,7 +49,9 @@ export function useAutosave(): SaveStatus {
 
   // Debounced autosave whenever the document changes.
   useEffect(() => {
+    if (!isFeatureEnabled('persistence')) return;
     const unsubscribe = useProjectStore.subscribe((state, prev) => {
+      if (useEditorStore.getState().readOnly) return;
       if (!restored.current || state.project === prev.project) return;
       setStatus('saving');
       if (timer.current) clearTimeout(timer.current);

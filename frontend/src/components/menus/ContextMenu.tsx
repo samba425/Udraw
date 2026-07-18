@@ -22,6 +22,10 @@ import { copySelection, cutSelection, hasClipboard, paste } from '@/services/cli
 import { pluginManager } from '@/plugins/registry';
 import { applyAutoLayout } from '@/engine/layout/autoLayout';
 import { useProjectStore } from '@/state/projectStore';
+import { pickFormatFromSelection, clearFormatPainter } from '@/engine/commands/formatPainter';
+import { insertSwimlanePool } from '@/engine/commands/swimlane';
+import { startPresentation } from '@/components/presentation/PresentationMode';
+import { editorBus } from '@/utils/eventBus';
 
 interface MenuEntry {
   label: string;
@@ -41,6 +45,7 @@ interface MenuPos {
 export function ContextMenu(): React.JSX.Element | null {
   const [pos, setPos] = useState<MenuPos | null>(null);
   const selectedIds = useEditorStore((s) => s.selectedIds);
+  const formatPainterActive = useEditorStore((s) => s.formatPainterActive);
 
   useEffect(() => {
     const onContext = (e: MouseEvent): void => {
@@ -69,6 +74,14 @@ export function ContextMenu(): React.JSX.Element | null {
     { label: 'Copy', shortcut: 'Ctrl+C', action: copySelection, disabled: !hasSelection },
     { label: 'Paste', shortcut: 'Ctrl+V', action: paste, disabled: !hasClipboard() },
     { label: 'Duplicate', shortcut: 'Ctrl+D', action: duplicateSelection, disabled: !hasSelection },
+    {
+      label: formatPainterActive ? 'Turn off format painter' : 'Copy format',
+      action: () => {
+        if (formatPainterActive) clearFormatPainter();
+        else if (!pickFormatFromSelection()) editorBus.emit('toast', { message: 'Select a shape first.', kind: 'error' });
+      },
+      disabled: !hasSelection && !formatPainterActive,
+    },
     { separator: true },
     { label: 'Group', shortcut: 'Ctrl+G', action: groupSelection, disabled: !multi },
     { label: 'Ungroup', shortcut: 'Ctrl+Shift+G', action: ungroupSelection, disabled: !hasSelection },
@@ -91,6 +104,8 @@ export function ContextMenu(): React.JSX.Element | null {
       },
       disabled: !hasSelection,
     },
+    { label: 'Insert swimlane', action: () => insertSwimlanePool(3) },
+    { label: 'Presentation mode', action: startPresentation },
     { separator: true },
     { label: 'Lock', action: () => setSelectionLocked(true), disabled: !hasSelection },
     { label: 'Unlock', action: () => setSelectionLocked(false), disabled: !hasSelection },

@@ -31,6 +31,12 @@ import {
   Link2,
   Keyboard,
   Network,
+  Paintbrush,
+  Presentation,
+  Eye,
+  Columns3,
+  Braces,
+  Columns2,
 } from 'lucide-react';
 import { Puzzle } from 'lucide-react';
 import type { ThemeMode, ToolId } from '@/types';
@@ -41,8 +47,11 @@ import { editorBus } from '@/utils/eventBus';
 import { pluginManager } from '@/plugins/registry';
 import { FileMenu } from './FileMenu';
 import { applyAutoLayout } from '@/engine/layout/autoLayout';
-import { copyShareLink } from '@/services/share/urlShare';
+import { copyShareLink, copyViewOnlyShareLink } from '@/services/share/urlShare';
 import { useProjectStore } from '@/state/projectStore';
+import { pickFormatFromSelection, clearFormatPainter } from '@/engine/commands/formatPainter';
+import { insertSwimlanePool } from '@/engine/commands/swimlane';
+import { startPresentation } from '@/components/presentation/PresentationMode';
 
 interface ToolDef {
   id: ToolId;
@@ -84,6 +93,9 @@ export function Toolbar(): React.JSX.Element {
   const setTemplatesOpen = useEditorStore((s) => s.setTemplatesOpen);
   const setShortcutsOpen = useEditorStore((s) => s.setShortcutsOpen);
   const selectedIds = useEditorStore((s) => s.selectedIds);
+  const formatPainterActive = useEditorStore((s) => s.formatPainterActive);
+  const viewMode = useEditorStore((s) => s.viewMode);
+  const setViewMode = useEditorStore((s) => s.setViewMode);
 
   const canUndo = useHistoryStore((s) => s.past.length > 0);
   const canRedo = useHistoryStore((s) => s.future.length > 0);
@@ -113,6 +125,25 @@ export function Toolbar(): React.JSX.Element {
       message: shapeIds.length > 0 ? 'Auto-layout applied to selection.' : 'Auto-layout applied to page.',
       kind: 'success',
     });
+  };
+
+  const toggleFormatPainter = (): void => {
+    if (formatPainterActive) {
+      clearFormatPainter();
+      editorBus.emit('toast', { message: 'Format painter off.', kind: 'info' });
+      return;
+    }
+    if (!pickFormatFromSelection()) {
+      editorBus.emit('toast', { message: 'Select a shape to copy its style first.', kind: 'error' });
+      return;
+    }
+    editorBus.emit('toast', { message: 'Format painter on — click shapes to apply.', kind: 'success' });
+  };
+
+  const viewOnlyLink = (): void => {
+    void copyViewOnlyShareLink(useProjectStore.getState().project)
+      .then(() => editorBus.emit('toast', { message: 'View-only link copied.', kind: 'success' }))
+      .catch(() => editorBus.emit('toast', { message: 'Could not copy link.', kind: 'error' }));
   };
 
   return (
@@ -174,14 +205,40 @@ export function Toolbar(): React.JSX.Element {
       ))}
 
       <div className="ml-auto" />
+      <IconButton
+        label="Split view (canvas + source)"
+        active={viewMode === 'split'}
+        onClick={() => setViewMode(viewMode === 'split' ? 'canvas' : 'split')}
+      >
+        <Columns2 size={18} />
+      </IconButton>
+      <IconButton
+        label="Source editor (JSON / YAML / Mermaid)"
+        active={viewMode === 'source'}
+        onClick={() => setViewMode(viewMode === 'source' ? 'canvas' : 'source')}
+      >
+        <Braces size={18} />
+      </IconButton>
       <IconButton label="Templates" onClick={() => setTemplatesOpen(true)}>
         <LayoutTemplate size={18} />
       </IconButton>
       <IconButton label="Auto layout" onClick={autoLayout}>
         <Network size={18} />
       </IconButton>
+      <IconButton label="Insert swimlane (3 lanes)" onClick={() => insertSwimlanePool(3)}>
+        <Columns3 size={18} />
+      </IconButton>
+      <IconButton label="Format painter" active={formatPainterActive} onClick={toggleFormatPainter}>
+        <Paintbrush size={18} />
+      </IconButton>
+      <IconButton label="Presentation (F5)" onClick={startPresentation}>
+        <Presentation size={18} />
+      </IconButton>
       <IconButton label="Copy share link" onClick={shareLink}>
         <Link2 size={18} />
+      </IconButton>
+      <IconButton label="Copy view-only link" onClick={viewOnlyLink}>
+        <Eye size={18} />
       </IconButton>
       <IconButton label="Keyboard shortcuts (?)" onClick={() => setShortcutsOpen(true)}>
         <Keyboard size={18} />

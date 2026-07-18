@@ -5,7 +5,14 @@
  * @module engine/routing/edgePath
  */
 import type { Edge, Page, Point } from '@/types';
-import { anchorPoint, nearestAnchor, shapeCenter } from './anchors';
+import {
+  anchorNormal,
+  anchorPoint,
+  nearestAnchor,
+  pairAnchors,
+  shapeCenter,
+  sideToward,
+} from './anchors';
 
 /** Result of routing an edge: its path and endpoint geometry. */
 export interface RoutedEdge {
@@ -20,82 +27,193 @@ export interface RoutedEdge {
   mid: Point;
 }
 
-/** Resolve an endpoint's world-space coordinate. */
+interface ResolvedEndpoint {
+  point: Point;
+  anchor?: string;
+}
+
+/** Resolve an endpoint's world-space coordinate and anchor side. */
 function resolveEndpoint(
   page: Page,
   endpoint: Edge['source'],
-  toward: Point | null,
-): Point {
+  role: 'source' | 'target',
+  other: Edge['target'],
+): ResolvedEndpoint {
   if (endpoint.shapeId) {
     const shape = page.shapes[endpoint.shapeId];
     if (shape) {
-      if (endpoint.anchor) return anchorPoint(shape, endpoint.anchor);
-      return toward ? nearestAnchor(shape, toward).point : shapeCenter(shape);
+      if (endpoint.anchor) {
+        return { point: anchorPoint(shape, endpoint.anchor), anchor: endpoint.anchor };
+      }
+      const otherShape = other.shapeId ? page.shapes[other.shapeId] : undefined;
+      if (otherShape) {
+        const pair = pairAnchors(
+          role === 'source' ? shape : otherShape,
+          role === 'source' ? otherShape : shape,
+        );
+        const anchor = role === 'source' ? pair.source : pair.target;
+        return { point: anchorPoint(shape, anchor), anchor };
+      }
+      if (other.point) {
+        const picked = nearestAnchor(shape, other.point);
+        return { point: picked.point, anchor: picked.name };
+      }
+      return { point: shapeCenter(shape), anchor: 'center' };
     }
   }
-  return endpoint.point ?? { x: 0, y: 0 };
+  return { point: endpoint.point ?? { x: 0, y: 0 } };
 }
 
 /** Compute the routed geometry for an edge within a page. */
 export function routeEdge(edge: Edge, page: Page): RoutedEdge {
-  // First pass: rough targets to choose nearest anchors.
-  const targetHint = edge.target.point ?? centerHint(page, edge.target.shapeId);
-  const sourceHint = edge.source.point ?? centerHint(page, edge.source.shapeId);
-  const start = resolveEndpoint(page, edge.source, targetHint);
-  const end = resolveEndpoint(page, edge.target, sourceHint);
+  const source = resolveEndpoint(page, edge.source, 'source', edge.target);
+  const target = resolveEndpoint(page, edge.target, 'target', edge.source);
+  const start = source.point;
+  const end = target.point;
 
-  const points: Point[] = [start, ...edge.waypoints, end];
+  let pathPoints: Point[];
+  switch (edge.router) {
+    case 'straight':
+      pathPoints = [start, ...edge.waypoints, end];
+      break;
+    case 'orthogonal':
+      pathPoints = orthogonalPoints(start, source.anchor, end, target.anchor, edge.waypoints);
+      break;
+    case 'curved':
+      pathPoints = [start, ...edge.waypoints, end];
+      break;
+    case 'bezier':
+      pathPoints = [start, end];
+      break;
+    default:
+      pathPoints = [start, ...edge.waypoints, end];
+  }
 
   let path: string;
   switch (edge.router) {
     case 'straight':
-      path = polyline(points);
+      path = polyline(pathPoints);
       break;
     case 'orthogonal':
-      path = orthogonal(points);
+      path = polyline(pathPoints);
       break;
     case 'curved':
-      path = smooth(points);
+      path = smooth(pathPoints);
       break;
     case 'bezier':
       path = bezier(start, end);
       break;
     default:
-      path = polyline(points);
+      path = polyline(pathPoints);
   }
 
-  const last = points[points.length - 2] ?? start;
-  const first = points[1] ?? end;
+  const pathForAngles = pathPoints.length >= 2 ? pathPoints : [start, end];
+  const endPrev = pathForAngles[pathForAngles.length - 2] ?? start;
+  const startNext = pathForAngles[1] ?? end;
+
   return {
     path,
     start,
     end,
-    mid: { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 },
-    endAngle: Math.atan2(end.y - last.y, end.x - last.x),
-    startAngle: Math.atan2(start.y - first.y, start.x - first.x),
+    mid: pathMidpoint(pathForAngles),
+    endAngle: Math.atan2(end.y - endPrev.y, end.x - endPrev.x),
+    startAngle: Math.atan2(startNext.y - start.y, startNext.x - start.x),
   };
 }
 
-function centerHint(page: Page, shapeId?: string): Point | null {
-  if (!shapeId) return null;
-  const shape = page.shapes[shapeId];
-  return shape ? shapeCenter(shape) : null;
+const ROUTING_GAP = 14;
+
+/** Build anchor-aware orthogonal points with exit/entry stubs. */
+function orthogonalPoints(
+  start: Point,
+  startAnchor: string | undefined,
+  end: Point,
+  endAnchor: string | undefined,
+  waypoints: Point[],
+): Point[] {
+  if (waypoints.length > 0) {
+    return [start, ...waypoints, end];
+  }
+
+  const startSide = startAnchor ?? sideToward(start, end);
+  const endSide = endAnchor ?? sideToward(end, start);
+  const startOut = extendPoint(start, anchorNormal(startSide), ROUTING_GAP);
+  const endOut = extendPoint(end, anchorNormal(endSide), ROUTING_GAP);
+  const middle = routeOrthogonalBetween(startOut, endOut, startSide, endSide);
+  return dedupePoints([start, startOut, ...middle, endOut, end]);
+}
+
+function extendPoint(point: Point, normal: Point, distance: number): Point {
+  return { x: point.x + normal.x * distance, y: point.y + normal.y * distance };
+}
+
+function routeOrthogonalBetween(
+  from: Point,
+  to: Point,
+  fromSide: string,
+  toSide: string,
+): Point[] {
+  const fromVertical = fromSide === 'top' || fromSide === 'bottom';
+  const toVertical = toSide === 'top' || toSide === 'bottom';
+
+  if (fromVertical && toVertical) {
+    const midY = (from.y + to.y) / 2;
+    return [{ x: from.x, y: midY }, { x: to.x, y: midY }, to];
+  }
+
+  if (!fromVertical && !toVertical) {
+    const midX = (from.x + to.x) / 2;
+    return [{ x: midX, y: from.y }, { x: midX, y: to.y }, to];
+  }
+
+  if (fromVertical) {
+    return [{ x: from.x, y: to.y }, to];
+  }
+
+  return [{ x: to.x, y: from.y }, to];
+}
+
+function dedupePoints(points: Point[]): Point[] {
+  const out: Point[] = [];
+  for (const point of points) {
+    const prev = out[out.length - 1];
+    if (prev && Math.abs(prev.x - point.x) < 0.01 && Math.abs(prev.y - point.y) < 0.01) continue;
+    out.push(point);
+  }
+  return out;
+}
+
+function pathMidpoint(points: Point[]): Point {
+  if (points.length < 2) {
+    const only = points[0] ?? { x: 0, y: 0 };
+    return only;
+  }
+  let length = 0;
+  const segments: Array<{ a: Point; b: Point; len: number }> = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i]!;
+    const b = points[i + 1]!;
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    segments.push({ a, b, len });
+    length += len;
+  }
+  const half = length / 2;
+  let walked = 0;
+  for (const segment of segments) {
+    if (walked + segment.len >= half) {
+      const t = segment.len === 0 ? 0 : (half - walked) / segment.len;
+      return {
+        x: segment.a.x + (segment.b.x - segment.a.x) * t,
+        y: segment.a.y + (segment.b.y - segment.a.y) * t,
+      };
+    }
+    walked += segment.len;
+  }
+  return points[Math.floor(points.length / 2)]!;
 }
 
 function polyline(points: Point[]): string {
   return points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-}
-
-/** Simple orthogonal (Manhattan) routing between successive points. */
-function orthogonal(points: Point[]): string {
-  let d = `M ${points[0]!.x} ${points[0]!.y}`;
-  for (let i = 1; i < points.length; i++) {
-    const prev = points[i - 1]!;
-    const curr = points[i]!;
-    const midX = (prev.x + curr.x) / 2;
-    d += ` L ${midX} ${prev.y} L ${midX} ${curr.y} L ${curr.x} ${curr.y}`;
-  }
-  return d;
 }
 
 /** Catmull-Rom-ish smoothing through the points. */

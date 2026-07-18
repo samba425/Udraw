@@ -18,6 +18,8 @@ import {
 } from '@/engine/commands/actions';
 import { copySelection, cutSelection, paste } from '@/services/clipboard';
 import { pluginManager } from '@/plugins/registry';
+import { startPresentation } from '@/components/presentation/PresentationMode';
+import { clearFormatPainter } from '@/engine/commands/formatPainter';
 
 /** True when a keyboard event matches a `mod+shift+key` style combo. */
 function matchesCombo(combo: string, e: KeyboardEvent): boolean {
@@ -62,6 +64,7 @@ export function useKeyboardShortcuts(): void {
     const onKeyDown = (e: KeyboardEvent): void => {
       const editor = useEditorStore.getState();
       if (editor.editingTextId || isEditable(e.target)) return;
+      if (editor.readOnly && e.key !== 'Escape' && e.key !== 'F5') return;
 
       const mod = e.metaKey || e.ctrlKey;
       const key = e.key.toLowerCase();
@@ -120,6 +123,19 @@ export function useKeyboardShortcuts(): void {
             e.preventDefault();
             editorBus.emit('export:request', { format: 'pdf' });
             return;
+          case 'j':
+            if (e.shiftKey) {
+              e.preventDefault();
+              const mode = editor.viewMode;
+              editor.setViewMode(mode === 'source' ? 'canvas' : 'source');
+            }
+            return;
+          case 'k':
+            if (e.shiftKey) {
+              e.preventDefault();
+              editor.setViewMode(editor.viewMode === 'split' ? 'canvas' : 'split');
+            }
+            return;
           default:
             return;
         }
@@ -136,6 +152,8 @@ export function useKeyboardShortcuts(): void {
           if (editor.shortcutsOpen) editor.setShortcutsOpen(false);
           if (editor.templatesOpen) editor.setTemplatesOpen(false);
           if (editor.welcomeOpen) editor.setWelcomeOpen(false);
+          if (editor.presentationOpen) editor.setPresentationOpen(false);
+          if (editor.formatPainterActive) clearFormatPainter();
           editor.clearSelection();
           editor.setTool('select');
           return;
@@ -165,6 +183,12 @@ export function useKeyboardShortcuts(): void {
       if (e.key === '?') {
         e.preventDefault();
         editor.setShortcutsOpen(true);
+        return;
+      }
+
+      if (e.key === 'F5') {
+        e.preventDefault();
+        if (!editor.readOnly && !editor.presentationOpen) startPresentation();
         return;
       }
 

@@ -110,23 +110,24 @@ interface ArrowMarkerProps {
 function ArrowMarker({ id, style, color, reverse }: ArrowMarkerProps): React.JSX.Element | null {
   if (style === 'none') return null;
   const orient = reverse ? 'auto-start-reverse' : 'auto';
+  const tipX = style === 'circle' ? 10 : 11;
   const common = {
     id,
     markerWidth: 12,
     markerHeight: 12,
-    refX: 9,
+    refX: tipX,
     refY: 6,
     orient,
     markerUnits: 'userSpaceOnUse' as const,
   };
   return (
     <marker {...common}>
-      {style === 'triangle' && <path d="M1,1 L11,6 L1,11 Z" fill={color} />}
+      {style === 'triangle' && <path d="M1,1 L11,6 L1,11 Z" fill={color} stroke="none" />}
       {style === 'arrow' && (
         <path d="M1,1 L11,6 L1,11" fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" />
       )}
-      {style === 'diamond' && <path d="M1,6 L6,1 L11,6 L6,11 Z" fill={color} />}
-      {style === 'circle' && <circle cx={6} cy={6} r={4} fill={color} />}
+      {style === 'diamond' && <path d="M1,6 L6,1 L11,6 L6,11 Z" fill={color} stroke="none" />}
+      {style === 'circle' && <circle cx={6} cy={6} r={4} fill={color} stroke="none" />}
     </marker>
   );
 }

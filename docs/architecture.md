@@ -1,5 +1,8 @@
 # Architecture
 
+> For a complete feature catalog, stack reference, and contributor guide, see
+> **[developer-guide.md](developer-guide.md)**.
+
 DiagramForge is a layered, framework-agnostic editor. React renders the UI, but
 all editing logic lives in an independent engine so it can be tested and reused
 without the DOM.

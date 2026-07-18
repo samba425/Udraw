@@ -1,13 +1,54 @@
 {
-  "name": "diagramforge-frontend",
-  "private": true,
+  "name": "@diagramforge/react",
+  "private": false,
   "version": "0.1.0",
   "type": "module",
-  "description": "DiagramForge - an offline-first, open-source draw.io alternative diagram editor.",
+  "description": "Embeddable offline-first diagram editor for React — a draw.io alternative.",
   "author": "samba425 <asiva325@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/samba425/Udraw.git",
+    "directory": "frontend"
+  },
+  "keywords": [
+    "diagram",
+    "flowchart",
+    "drawio",
+    "react",
+    "svg",
+    "editor",
+    "whiteboard"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/diagramforge.js",
+      "require": "./dist/diagramforge.umd.cjs"
+    },
+    "./styles.css": "./dist/diagramforge.css"
+  },
+  "main": "./dist/diagramforge.umd.cjs",
+  "module": "./dist/diagramforge.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/diagramforge.js",
+    "dist/diagramforge.umd.cjs",
+    "dist/diagramforge.css",
+    "dist/index.d.ts"
+  ],
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:lib": "vite build --config vite.lib.config.ts",
+    "build:all": "npm run build && npm run build:lib",
     "preview": "vite preview --host",
     "lint": "eslint .",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
@@ -18,13 +59,14 @@
   },
   "dependencies": {
     "idb": "^8.0.0",
+    "js-yaml": "^5.2.1",
     "jspdf": "^4.2.1",
     "jszip": "^3.10.1",
     "lucide-react": "^0.469.0",
     "motion": "^11.15.0",
     "nanoid": "^5.0.9",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0",
     "react-hook-form": "^7.54.2",
     "react-router-dom": "^7.1.1",
     "zustand": "^5.0.2"
@@ -36,6 +78,7 @@
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@testing-library/user-event": "^14.5.2",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
@@ -50,6 +93,8 @@
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.18.1",
     "vite": "^7.0.0",
+    "vite-plugin-dts": "^4.5.4",
+    "vite-plugin-pwa": "^1.3.0",
     "vitest": "^3.0.0"
   }
 }

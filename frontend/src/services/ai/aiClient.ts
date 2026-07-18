@@ -17,8 +17,14 @@ export interface GenerationResult {
   source: GenerationSource;
 }
 
-/** Resolve the backend base URL from Vite env, if configured. */
+import { getRuntimeConfig } from '@/lib/runtimeConfig';
+
+/** Resolve the backend base URL from runtime config or Vite env, if configured. */
 function apiBaseUrl(): string | undefined {
+  const runtime = getRuntimeConfig().apiBaseUrl;
+  if (typeof runtime === 'string' && runtime.trim()) {
+    return runtime.replace(/\/$/, '');
+  }
   const url = import.meta.env.VITE_API_BASE_URL;
   return typeof url === 'string' && url.trim() ? url.replace(/\/$/, '') : undefined;
 }

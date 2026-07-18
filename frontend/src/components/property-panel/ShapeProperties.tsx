@@ -102,6 +102,15 @@ export function ShapeProperties({ shape }: { shape: Shape }): React.JSX.Element 
           />
         </div>
       </PanelSection>
+
+      <PanelSection title="Link">
+        <TextAreaField
+          label="Hyperlink (Ctrl+Click to open)"
+          value={shape.hyperlink ?? ''}
+          onChange={(hyperlink) => set({ hyperlink }, 'Edit hyperlink')}
+          placeholder="https://example.com"
+        />
+      </PanelSection>
     </>
   );
 }

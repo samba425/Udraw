@@ -61,6 +61,7 @@ export function createShape(init: ShapeInit, layerId: string, colorIndex = 0): S
     src: init.src,
     points: init.points,
     metadata: init.metadata ?? {},
+    hyperlink: init.hyperlink ?? '',
   };
 }
 

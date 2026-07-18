@@ -223,14 +223,15 @@ function arrowMarkers(edge: Edge): string {
     }
   };
   const color = escapeXml(edge.stroke);
+  const tipRef = (style: string): number => (style === 'circle' ? 10 : 11);
   if (edge.endArrow !== 'none') {
     defs.push(
-      `<marker id="arrow_${edge.id}_end" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto" markerUnits="userSpaceOnUse">${shape(edge.endArrow, color)}</marker>`,
+      `<marker id="arrow_${edge.id}_end" markerWidth="12" markerHeight="12" refX="${tipRef(edge.endArrow)}" refY="6" orient="auto" markerUnits="userSpaceOnUse">${shape(edge.endArrow, color)}</marker>`,
     );
   }
   if (edge.startArrow !== 'none') {
     defs.push(
-      `<marker id="arrow_${edge.id}_start" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto-start-reverse" markerUnits="userSpaceOnUse">${shape(edge.startArrow, color)}</marker>`,
+      `<marker id="arrow_${edge.id}_start" markerWidth="12" markerHeight="12" refX="${tipRef(edge.startArrow)}" refY="6" orient="auto-start-reverse" markerUnits="userSpaceOnUse">${shape(edge.startArrow, color)}</marker>`,
     );
   }
   return defs.join('');

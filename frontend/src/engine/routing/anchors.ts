@@ -59,3 +59,44 @@ export function nearestAnchor(shape: Shape, target: Point): { name: string; poin
   }
   return best;
 }
+
+/**
+ * Pick complementary source/target anchors from relative shape placement.
+ * Prefers vertical flow (bottom→top) for org-chart style layouts.
+ */
+export function pairAnchors(source: Shape, target: Shape): { source: string; target: string } {
+  const sc = shapeCenter(source);
+  const tc = shapeCenter(target);
+  const dx = tc.x - sc.x;
+  const dy = tc.y - sc.y;
+  const verticalThreshold = Math.min(source.height, target.height) * 0.25;
+
+  if (dy > verticalThreshold) return { source: 'bottom', target: 'top' };
+  if (dy < -verticalThreshold) return { source: 'top', target: 'bottom' };
+  if (dx >= 0) return { source: 'right', target: 'left' };
+  return { source: 'left', target: 'right' };
+}
+
+/** Outward-facing unit normal for a named cardinal anchor. */
+export function anchorNormal(anchor: string | undefined): Point {
+  switch (anchor) {
+    case 'top':
+      return { x: 0, y: -1 };
+    case 'bottom':
+      return { x: 0, y: 1 };
+    case 'left':
+      return { x: -1, y: 0 };
+    case 'right':
+      return { x: 1, y: 0 };
+    default:
+      return { x: 0, y: 0 };
+  }
+}
+
+/** Infer the anchor side that faces a target point. */
+export function sideToward(from: Point, toward: Point): string {
+  const dx = toward.x - from.x;
+  const dy = toward.y - from.y;
+  if (Math.abs(dy) >= Math.abs(dx)) return dy >= 0 ? 'bottom' : 'top';
+  return dx >= 0 ? 'right' : 'left';
+}

@@ -7,6 +7,7 @@ import { pluginManager } from './registry';
 import { diagramStatsPlugin } from './builtin/diagramStats';
 import { mermaidExportPlugin } from './builtin/mermaidExport';
 import { mermaidImportPlugin } from './builtin/mermaidImport';
+import { plantumlImportPlugin } from './builtin/plantumlImport';
 
 let registered = false;
 
@@ -16,6 +17,7 @@ export function registerBuiltinPlugins(): void {
   pluginManager.register(diagramStatsPlugin);
   pluginManager.register(mermaidExportPlugin);
   pluginManager.register(mermaidImportPlugin);
+  pluginManager.register(plantumlImportPlugin);
   registered = true;
 }
 
