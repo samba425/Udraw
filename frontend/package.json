@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "description": "DiagramForge - an offline-first, open-source draw.io alternative diagram editor.",
+  "author": "samba425 <asiva325@gmail.com>",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

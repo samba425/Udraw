@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Optional Fastify backend for DiagramForge: AI diagram generation, project sync, and health checks.",
+  "author": "samba425 <asiva325@gmail.com>",
   "engines": {
     "node": ">=22"
   },

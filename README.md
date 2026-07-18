@@ -12,8 +12,8 @@ optional backend adds AI diagram generation and project sync.
 ## Features
 
 - **Infinite SVG canvas** with pan, wheel-zoom, grid, and snap.
-- **Colored shape libraries**: Basic, Flowchart, UML, AWS, Azure, Cisco,
-  Networking, Kubernetes, BPMN, Mind Map, Org Chart, Sticky Notes, Icons, and
+- **Colored shape libraries**: Basic, Flowchart, UML, AWS, Azure, Network,
+  Kubernetes, BPMN, Mind Map, Org Chart, Sticky Notes, Icons, and
   Custom SVG — searchable, with favorites and drag-and-drop.
 - **Connectors**: straight, orthogonal, curved, and bezier routing with magnetic
   anchors, reconnection, arrow styles, dashed/animated lines, and labels.
@@ -194,3 +194,7 @@ keyboard) · offline-first · zero paid dependencies.
 ## License
 
 MIT.
+
+## Author
+
+**samba425** — [asiva325@gmail.com](mailto:asiva325@gmail.com)

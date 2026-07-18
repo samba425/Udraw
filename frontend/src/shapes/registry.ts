@@ -1,6 +1,6 @@
 /**
  * Central registry for library icon shapes. Shape libraries (AWS, Azure,
- * Cisco, Kubernetes, ...) register colored SVG icons here. Plugins can extend
+ * Network, Kubernetes, ...) register colored SVG icons here. Plugins can extend
  * the registry at runtime.
  * @module shapes/registry
  */

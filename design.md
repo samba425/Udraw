@@ -21,7 +21,6 @@ The application should support:
 * UML
 * AWS Architecture
 * Azure Architecture
-* Cisco Architecture
 * Kubernetes Diagrams
 * Network Topology
 * ER Diagrams
@@ -603,8 +602,6 @@ Flowchart
 AWS
 
 Azure
-
-Cisco
 
 Networking
 
