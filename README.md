@@ -13,7 +13,14 @@ optional backend adds AI diagram generation and project sync.
 
 **https://samba425.github.io/Udraw/**
 
-Deployed automatically from `main` via GitHub Actions (see `.github/workflows/deploy-pages.yml`).
+Deployed from `main` via GitHub Actions (`.github/workflows/deploy-pages.yml`).
+
+**One-time setup** (if the URL shows 404):
+
+1. Open [github.com/samba425/Udraw/settings/pages](https://github.com/samba425/Udraw/settings/pages)
+2. **Build and deployment → Source:** Deploy from a branch
+3. **Branch:** `gh-pages` → folder **`/ (root)`** → Save
+4. Wait ~1 minute for the site to go live
 
 ---
 
