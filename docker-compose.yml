@@ -1,0 +1,100 @@
+# DiagramForge orchestration.
+#
+#   docker compose up --build            # frontend + backend
+#   docker compose --profile db up --build   # also start PostgreSQL
+#
+# The editor is fully functional with just the frontend; the backend adds
+# optional AI generation and project sync.
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        # Route API calls through nginx to the backend service. Set to an empty
+        # string to build a fully offline bundle.
+        VITE_API_BASE_URL: ""
+    image: diagramforge/frontend:latest
+    ports:
+      - "8080:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - diagramforge
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    image: diagramforge/backend:latest
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "8787"
+      # Allow the frontend origin (served by nginx on 8080).
+      CORS_ORIGIN: "http://localhost:8080"
+      RATE_LIMIT_MAX: "60"
+      RATE_LIMIT_WINDOW: "1 minute"
+      # Optional AI provider — supplied from the host environment, never baked in.
+      AI_PROVIDER: "${AI_PROVIDER:-}"
+      AI_API_KEY: "${AI_API_KEY:-}"
+      AI_MODEL: "${AI_MODEL:-}"
+    expose:
+      - "8787"
+    networks:
+      - diagramforge
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+
+  # Optional PostgreSQL for future backend-backed project sync.
+  # Enable with:  docker compose --profile db up
+  postgres:
+    image: postgres:17-alpine
+    profiles:
+      - db
+    environment:
+      POSTGRES_DB: diagramforge
+      POSTGRES_USER: diagramforge
+      # Provide a strong password via the host environment for anything beyond
+      # local development. The default below is for local use only.
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-diagramforge_local_dev}"
+    # Not published to the host; only reachable on the internal network.
+    expose:
+      - "5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - diagramforge
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U diagramforge -d diagramforge"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+networks:
+  diagramforge:
+    driver: bridge
+
+volumes:
+  postgres-data:

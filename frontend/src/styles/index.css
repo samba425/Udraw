@@ -1,0 +1,84 @@
+@import 'tailwindcss';
+
+/*
+ * DiagramForge theme tokens.
+ * Colors are exposed as CSS variables so themes (light/dark/custom) can be
+ * swapped at runtime by toggling the `data-theme` attribute on <html>.
+ */
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+:root,
+[data-theme='light'] {
+  --color-bg: #f7f8fa;
+  --color-surface: #ffffff;
+  --color-surface-alt: #f1f3f5;
+  --color-border: #e2e5e9;
+  --color-text: #1f2430;
+  --color-text-muted: #6b7280;
+  --color-accent: #6366f1;
+  --color-accent-hover: #4f46e5;
+  --color-canvas: #ffffff;
+  --color-grid: #e6e8ec;
+  --color-grid-strong: #d3d7dd;
+  --color-selection: #6366f1;
+}
+
+[data-theme='dark'] {
+  --color-bg: #0f1115;
+  --color-surface: #171a21;
+  --color-surface-alt: #1e222b;
+  --color-border: #2a2f3a;
+  --color-text: #e6e8ec;
+  --color-text-muted: #9aa1ad;
+  --color-accent: #818cf8;
+  --color-accent-hover: #a5b4fc;
+  --color-canvas: #12151b;
+  --color-grid: #232833;
+  --color-grid-strong: #2e3440;
+  --color-selection: #818cf8;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Utility helpers bound to the theme tokens. */
+.surface {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+}
+.surface-alt {
+  background-color: var(--color-surface-alt);
+}
+.bordered {
+  border-color: var(--color-border);
+}
+
+.df-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.df-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 6px;
+}
+.df-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.df-focus-ring:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
