@@ -7,14 +7,17 @@ import { memo } from 'react';
 import type { Shape } from '@/types';
 import { freehandPath, geometryForShape } from '@/engine/renderer/shapePath';
 import { dashArray, resolveFill } from '@/engine/renderer/style';
+import { groupShowsBorder } from '@/models/groupMembership';
 import { ShapeLabel } from './ShapeLabel';
 import { IconShape } from './IconShape';
 
 interface ShapeViewProps {
   shape: Shape;
   selected: boolean;
+  flowHighlighted?: boolean;
+  flowDimmed?: boolean;
   onPointerDown: (event: React.PointerEvent, shapeId: string) => void;
-  onDoubleClick: (shapeId: string) => void;
+  onDoubleClick: (event: React.MouseEvent, shapeId: string) => void;
   onPointerEnter?: (shapeId: string) => void;
   onPointerLeave?: (shapeId: string) => void;
 }
@@ -23,6 +26,8 @@ interface ShapeViewProps {
 export const ShapeView = memo(function ShapeView({
   shape,
   selected,
+  flowHighlighted = false,
+  flowDimmed = false,
   onPointerDown,
   onDoubleClick,
   onPointerEnter,
@@ -37,11 +42,14 @@ export const ShapeView = memo(function ShapeView({
   const dash = dashArray(shape.dash, shape.strokeWidth);
   const hasShadow = shape.shadow.enabled;
   const hasLink = Boolean(shape.hyperlink?.trim());
+  const opacity = flowDimmed ? shape.opacity * 0.2 : shape.opacity;
+  const stroke = flowHighlighted ? 'var(--color-accent, #7c3aed)' : shape.stroke;
+  const strokeWidth = flowHighlighted ? shape.strokeWidth + 2 : shape.strokeWidth;
 
   const commonProps = {
     fill,
-    stroke: shape.stroke,
-    strokeWidth: shape.strokeWidth,
+    stroke,
+    strokeWidth,
     strokeDasharray: dash,
     filter: hasShadow ? `url(#${filterId})` : undefined,
   };
@@ -49,14 +57,14 @@ export const ShapeView = memo(function ShapeView({
   return (
     <g
       transform={`translate(${shape.x} ${shape.y}) rotate(${shape.rotation} ${shape.width / 2} ${shape.height / 2})`}
-      opacity={shape.opacity}
+      opacity={opacity}
       style={{
         cursor: shape.locked ? 'default' : hasLink ? 'pointer' : 'move',
       }}
       onPointerDown={(e) => onPointerDown(e, shape.id)}
       onPointerEnter={() => onPointerEnter?.(shape.id)}
       onPointerLeave={() => onPointerLeave?.(shape.id)}
-      onDoubleClick={() => onDoubleClick(shape.id)}
+      onDoubleClick={(e) => onDoubleClick(e, shape.id)}
       data-shape-id={shape.id}
       role="img"
       aria-label={shape.text || shape.kind}
@@ -93,7 +101,29 @@ export const ShapeView = memo(function ShapeView({
 
       <g filter={shape.blur > 0 ? `url(#blur_${shape.id})` : undefined}>
         {shape.kind === 'group' ? (
-          <rect width={shape.width} height={shape.height} fill="transparent" stroke="none" />
+          <>
+            <rect
+              width={shape.width}
+              height={shape.height}
+              fill="transparent"
+              stroke={groupShowsBorder(shape) ? shape.stroke : 'none'}
+              strokeWidth={groupShowsBorder(shape) ? shape.strokeWidth : 0}
+              strokeDasharray={groupShowsBorder(shape) ? dashArray(shape.dash, shape.strokeWidth) : undefined}
+              rx={4}
+            />
+            {shape.text && (
+              <text
+                x={8}
+                y={18}
+                fontSize={12}
+                fontWeight={600}
+                fill="var(--color-text-muted)"
+                pointerEvents="none"
+              >
+                {shape.text}
+              </text>
+            )}
+          </>
         ) : shape.kind === 'image' && shape.src ? (
           <image href={shape.src} width={shape.width} height={shape.height} preserveAspectRatio="xMidYMid meet" />
         ) : shape.kind === 'icon' && shape.libraryId ? (

@@ -29,7 +29,10 @@ import { ShapeView } from './ShapeView';
 import { EdgeView } from './EdgeView';
 import { SelectionOverlay } from './SelectionOverlay';
 import { AnchorOverlay } from './AnchorOverlay';
-import { EndpointOverlay } from './EndpointOverlay';
+import { EdgeRouteOverlay } from './EdgeRouteOverlay';
+import { flowHighlightIds } from '@/engine/presentation/flowPath';
+import { GroupBreadcrumb } from './GroupBreadcrumb';
+import { isDescendantOf, findGroupContainerAt } from '@/models/groupMembership';
 
 /**
  * Above this element count, the canvas culls off-screen elements to keep the
@@ -52,9 +55,12 @@ export function Canvas({ readOnly: readOnlyOverride }: { readOnly?: boolean } = 
   const hoveredShapeId = useEditorStore((s) => s.hoveredShapeId);
   const connectTargetId = useEditorStore((s) => s.connectTargetId);
   const readOnlyStore = useEditorStore((s) => s.readOnly);
+  const presentationFlowActive = useEditorStore((s) => s.presentationFlowActive);
+  const presentationFlowStep = useEditorStore((s) => s.presentationFlowStep);
+  const presentationFlowPath = useEditorStore((s) => s.presentationFlowPath);
+  const activeGroupId = useEditorStore((s) => s.activeGroupId);
   const readOnly = readOnlyOverride ?? readOnlyStore;
   const setHoveredShapeId = useEditorStore((s) => s.setHoveredShapeId);
-  const setEditingText = useEditorStore((s) => s.setEditingText);
   const zoomBy = useEditorStore((s) => s.zoomBy);
 
   const project = useProjectStore((s) => s.project);
@@ -71,6 +77,9 @@ export function Canvas({ readOnly: readOnlyOverride }: { readOnly?: boolean } = 
   });
   const selectedSet = new Set(selectedIds);
   const layers = layerMap(page);
+  const flowHighlight = presentationFlowActive
+    ? flowHighlightIds(presentationFlowPath, presentationFlowStep)
+    : null;
 
   const anchorShapeIds = useMemo(() => {
     if (tool === 'connector') return undefined;
@@ -144,11 +153,6 @@ export function Canvas({ readOnly: readOnlyOverride }: { readOnly?: boolean } = 
     [zoomBy],
   );
 
-  const onDoubleClickElement = useCallback(
-    (id: string) => setEditingText(id),
-    [setEditingText],
-  );
-
   const onShapeEnter = useCallback(
     (id: string) => setHoveredShapeId(id),
     [setHoveredShapeId],
@@ -187,13 +191,21 @@ export function Canvas({ readOnly: readOnlyOverride }: { readOnly?: boolean } = 
       { x: event.clientX - (rect?.left ?? 0), y: event.clientY - (rect?.top ?? 0) },
       cam,
     );
-    placeLibraryIcon(icon, world);
+    placeLibraryIcon(icon, world, { parentGroupId: findGroupContainerAt(useProjectStore.getState().activePage(), world)?.id });
   }, []);
 
   const selectedShapes = selectedIds
     .map((id) => page.shapes[id])
     .filter((s): s is NonNullable<typeof s> => Boolean(s));
   const selectedEdge = selectedIds.length === 1 ? page.edges[selectedIds[0]!] : undefined;
+
+  const shapeDimmed = useCallback(
+    (shapeId: string): boolean => {
+      if (!activeGroupId) return false;
+      return shapeId !== activeGroupId && !isDescendantOf(page, shapeId, activeGroupId);
+    },
+    [activeGroupId, page],
+  );
 
   const cursor = readOnly
     ? tool === 'pan'
@@ -206,7 +218,9 @@ export function Canvas({ readOnly: readOnlyOverride }: { readOnly?: boolean } = 
         : 'crosshair';
 
   return (
-    <svg
+    <div className="relative h-full w-full">
+      {!readOnly && <GroupBreadcrumb />}
+      <svg
       ref={svgRef}
       className="h-full w-full touch-none select-none"
       style={{ background: 'var(--color-canvas)', cursor }}
@@ -224,27 +238,34 @@ export function Canvas({ readOnly: readOnlyOverride }: { readOnly?: boolean } = 
           if (visibleIds && !visibleIds.has(id)) return null;
           const edge = page.edges[id];
           if (edge) {
+            const inFlow = flowHighlight?.has(id) ?? false;
             return (
               <EdgeView
                 key={id}
                 edge={edge}
                 page={page}
                 selected={selectedSet.has(id)}
+                flowHighlighted={inFlow}
+                flowDimmed={Boolean(flowHighlight && !inFlow)}
                 onPointerDown={interactions.onEdgePointerDown}
-                onDoubleClick={onDoubleClickElement}
+                onDoubleClick={interactions.onEdgeDoubleClick}
               />
             );
           }
           const shape = page.shapes[id];
           if (shape) {
             if (!isShapeVisible(layers, shape)) return null;
+            const inFlow = flowHighlight?.has(id) ?? false;
+            const dimmed = Boolean(flowHighlight && !inFlow) || shapeDimmed(id);
             return (
               <ShapeView
                 key={id}
                 shape={shape}
                 selected={selectedSet.has(id)}
+                flowHighlighted={inFlow}
+                flowDimmed={dimmed}
                 onPointerDown={interactions.onShapePointerDown}
-                onDoubleClick={onDoubleClickElement}
+                onDoubleClick={interactions.onShapeDoubleClick}
                 onPointerEnter={onShapeEnter}
                 onPointerLeave={onShapeLeave}
               />
@@ -286,12 +307,14 @@ export function Canvas({ readOnly: readOnlyOverride }: { readOnly?: boolean } = 
           onRotateHandleDown={interactions.onRotateHandleDown}
         />
 
-        {selectedEdge && (
-          <EndpointOverlay
+        {selectedEdge && tool === 'select' && !readOnly && (
+          <EdgeRouteOverlay
             edge={selectedEdge}
             page={page}
             zoom={camera.zoom}
             onEndpointDown={interactions.onEndpointDown}
+            onWaypointDown={interactions.onWaypointDown}
+            onLabelDown={interactions.onLabelDown}
           />
         )}
 
@@ -362,5 +385,6 @@ export function Canvas({ readOnly: readOnlyOverride }: { readOnly?: boolean } = 
         )}
       </g>
     </svg>
+    </div>
   );
 }

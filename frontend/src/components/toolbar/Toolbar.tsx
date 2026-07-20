@@ -37,6 +37,8 @@ import {
   Columns3,
   Braces,
   Columns2,
+  Group,
+  Ungroup,
 } from 'lucide-react';
 import { Puzzle } from 'lucide-react';
 import type { ThemeMode, ToolId } from '@/types';
@@ -51,6 +53,7 @@ import { copyShareLink, copyViewOnlyShareLink } from '@/services/share/urlShare'
 import { useProjectStore } from '@/state/projectStore';
 import { pickFormatFromSelection, clearFormatPainter } from '@/engine/commands/formatPainter';
 import { insertSwimlanePool } from '@/engine/commands/swimlane';
+import { groupSelection, selectionHasGroup, ungroupSelection } from '@/engine/commands/actions';
 import { startPresentation } from '@/components/presentation/PresentationMode';
 
 interface ToolDef {
@@ -169,6 +172,20 @@ export function Toolbar(): React.JSX.Element {
       ))}
 
       <Divider />
+      <IconButton
+        label="Group selection (Ctrl+G)"
+        disabled={selectedIds.filter((id) => useProjectStore.getState().activePage().shapes[id]).length < 2}
+        onClick={() => groupSelection()}
+      >
+        <Group size={18} />
+      </IconButton>
+      <IconButton
+        label="Ungroup (Ctrl+Shift+G)"
+        disabled={!selectionHasGroup()}
+        onClick={ungroupSelection}
+      >
+        <Ungroup size={18} />
+      </IconButton>
       <IconButton label="Undo (Ctrl+Z)" disabled={!canUndo} onClick={undo}>
         <Undo2 size={18} />
       </IconButton>

@@ -1,37 +1,34 @@
 /**
- * Clipboard for shapes. Uses an in-memory buffer as the source of truth and
- * mirrors to the system clipboard as JSON (best-effort) so copies survive
- * across tabs. Paste offsets each copy so it does not land exactly on top.
+ * Clipboard for shapes and connectors. Uses an in-memory buffer as the source
+ * of truth and mirrors to the system clipboard as JSON (best-effort).
  * @module services/clipboard
  */
-import type { Shape } from '@/types';
+import type { Edge, Shape } from '@/types';
 import { useProjectStore } from '@/state/projectStore';
 import { useEditorStore } from '@/state/editorStore';
 import { useHistoryStore } from '@/state/historyStore';
-import { createId } from '@/models/factory';
+import { bundleFromSelection, cloneBundle } from '@/models/groupBundle';
 
 /** Serialized clipboard payload. */
 interface ClipboardPayload {
-  type: 'diagramforge/shapes';
+  type: 'diagramforge/bundle';
   shapes: Shape[];
+  edges: Edge[];
 }
 
-let buffer: Shape[] = [];
+let buffer: ClipboardPayload | null = null;
 let pasteCount = 0;
 const PASTE_OFFSET = 16;
 
-/** Copy the current selection into the clipboard buffer. */
+/** Copy the current selection into the clipboard buffer (includes group contents). */
 export function copySelection(): void {
   const page = useProjectStore.getState().activePage();
-  const shapes = useEditorStore
-    .getState()
-    .selectedIds.map((id) => page.shapes[id])
-    .filter((s): s is Shape => Boolean(s));
-  if (shapes.length === 0) return;
-  buffer = shapes.map((s) => structuredClone(s));
+  const ids = useEditorStore.getState().selectedIds;
+  const bundle = bundleFromSelection(page, ids);
+  if (bundle.shapes.length === 0) return;
+  buffer = { type: 'diagramforge/bundle', shapes: bundle.shapes, edges: bundle.edges };
   pasteCount = 0;
-  const payload: ClipboardPayload = { type: 'diagramforge/shapes', shapes: buffer };
-  void navigator.clipboard?.writeText(JSON.stringify(payload)).catch(() => undefined);
+  void navigator.clipboard?.writeText(JSON.stringify(buffer)).catch(() => undefined);
 }
 
 /** Cut = copy then delete the selection. */
@@ -47,22 +44,19 @@ export function cutSelection(): void {
 
 /** Paste the clipboard buffer with a cascading offset; selects the copies. */
 export function paste(): void {
-  if (buffer.length === 0) return;
+  if (!buffer || buffer.shapes.length === 0) return;
   pasteCount += 1;
   const delta = PASTE_OFFSET * pasteCount;
-  const clones = buffer.map((s) => ({
-    ...structuredClone(s),
-    id: createId('shape'),
-    x: s.x + delta,
-    y: s.y + delta,
-  }));
+  const cloned = cloneBundle({ shapes: buffer.shapes, edges: buffer.edges }, { x: delta, y: delta });
   useHistoryStore.getState().run('Paste', () => {
-    useProjectStore.getState().addShapes(clones);
-    useEditorStore.getState().select(clones.map((c) => c.id));
+    const store = useProjectStore.getState();
+    store.addShapes(cloned.shapes);
+    store.addEdges(cloned.edges);
+    useEditorStore.getState().select(cloned.selectIds);
   });
 }
 
 /** True when there is something to paste. */
 export function hasClipboard(): boolean {
-  return buffer.length > 0;
+  return Boolean(buffer && buffer.shapes.length > 0);
 }

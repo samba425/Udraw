@@ -7,6 +7,12 @@
 import { create } from 'zustand';
 import type { Edge, Layer, Page, Project, Shape } from '@/types';
 import { createLayer, createPage, createProject } from '@/models/factory';
+import {
+  expandDeleteIds,
+  expandMovableIds,
+  groupsAffectedByMove,
+  syncGroupBoundsPatches,
+} from '@/models/group';
 import { editorBus } from '@/utils/eventBus';
 
 interface ProjectState {
@@ -27,7 +33,10 @@ interface ProjectState {
   removeElements: (ids: string[]) => void;
 
   addEdge: (edge: Edge) => void;
+  addEdges: (edges: Edge[]) => void;
   updateEdge: (id: string, patch: Partial<Edge>) => void;
+  updateEdges: (patches: Record<string, Partial<Edge>>) => void;
+  setPageOrder: (order: string[]) => void;
 
   moveElementsBy: (ids: string[], dx: number, dy: number) => void;
   reorder: (id: string, direction: 'front' | 'back' | 'forward' | 'backward') => void;
@@ -113,8 +122,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       project: withActivePage(s.project, s.activePageId, (p) => {
         const shapes = { ...p.shapes };
         const edges = { ...p.edges };
-        const idSet = new Set(ids);
-        for (const id of ids) {
+        const idSet = new Set(expandDeleteIds(p, ids));
+        for (const id of idSet) {
           delete shapes[id];
           delete edges[id];
         }
@@ -146,6 +155,19 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       })),
     })),
 
+  addEdges: (edges) =>
+    set((s) => ({
+      project: withActivePage(s.project, s.activePageId, (p) => {
+        const next = { ...p.edges };
+        for (const edge of edges) next[edge.id] = edge;
+        return {
+          ...p,
+          edges: next,
+          order: [...p.order, ...edges.map((e) => e.id)],
+        };
+      }),
+    })),
+
   updateEdge: (id, patch) =>
     set((s) => ({
       project: withActivePage(s.project, s.activePageId, (p) => {
@@ -155,15 +177,42 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       }),
     })),
 
+  updateEdges: (patches) =>
+    set((s) => ({
+      project: withActivePage(s.project, s.activePageId, (p) => {
+        const next = { ...p.edges };
+        for (const [id, patch] of Object.entries(patches)) {
+          const edge = next[id];
+          if (edge) next[id] = { ...edge, ...patch };
+        }
+        return { ...p, edges: next };
+      }),
+    })),
+
+  setPageOrder: (order) =>
+    set((s) => ({
+      project: withActivePage(s.project, s.activePageId, (p) => ({ ...p, order })),
+    })),
+
   moveElementsBy: (ids, dx, dy) =>
     set((s) => ({
       project: withActivePage(s.project, s.activePageId, (p) => {
         const shapes = { ...p.shapes };
-        for (const id of ids) {
+        const moved = expandMovableIds(p, ids);
+        for (const id of moved) {
           const shape = shapes[id];
           if (shape && !shape.locked) {
             shapes[id] = { ...shape, x: shape.x + dx, y: shape.y + dy };
           }
+        }
+        const pageAfterMove = { ...p, shapes };
+        const groupPatches = syncGroupBoundsPatches(
+          pageAfterMove,
+          groupsAffectedByMove(p, moved),
+        );
+        for (const [id, patch] of Object.entries(groupPatches)) {
+          const shape = shapes[id];
+          if (shape) shapes[id] = { ...shape, ...patch };
         }
         return { ...p, shapes };
       }),

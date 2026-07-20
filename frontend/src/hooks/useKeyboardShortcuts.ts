@@ -148,6 +148,10 @@ export function useKeyboardShortcuts(): void {
           deleteSelection();
           return;
         case 'Escape':
+          if (editor.activeGroupId) {
+            editor.setActiveGroupId(null);
+            return;
+          }
           if (editor.searchOpen) editor.setSearchOpen(false);
           if (editor.shortcutsOpen) editor.setShortcutsOpen(false);
           if (editor.templatesOpen) editor.setTemplatesOpen(false);

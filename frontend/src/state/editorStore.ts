@@ -32,10 +32,15 @@ interface EditorState {
   readOnly: boolean;
   presentationOpen: boolean;
   presentationIndex: number;
+  presentationFlowActive: boolean;
+  presentationFlowStep: number;
+  presentationFlowPath: string[];
   formatPainterActive: boolean;
   formatPainterStyle: ShapeStylePatch | null;
   viewMode: 'canvas' | 'source' | 'split';
   sourceFormat: SourceFormat;
+  /** When set, clicks select shapes inside this group instead of the container. */
+  activeGroupId: string | null;
 
   setTool: (tool: ToolId) => void;
   setCamera: (camera: Camera) => void;
@@ -68,10 +73,14 @@ interface EditorState {
   setReadOnly: (readOnly: boolean) => void;
   setPresentationOpen: (open: boolean) => void;
   setPresentationIndex: (index: number) => void;
+  setPresentationFlowActive: (active: boolean) => void;
+  setPresentationFlowStep: (step: number) => void;
+  setPresentationFlowPath: (path: string[]) => void;
   setFormatPainterActive: (active: boolean) => void;
   setFormatPainterStyle: (style: ShapeStylePatch | null) => void;
   setViewMode: (mode: 'canvas' | 'source' | 'split') => void;
   setSourceFormat: (format: SourceFormat) => void;
+  setActiveGroupId: (groupId: string | null) => void;
 }
 
 /** Zustand store for ephemeral editor/UI state. */
@@ -94,10 +103,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   readOnly: false,
   presentationOpen: false,
   presentationIndex: 0,
+  presentationFlowActive: false,
+  presentationFlowStep: 0,
+  presentationFlowPath: [],
   formatPainterActive: false,
   formatPainterStyle: null,
   viewMode: 'canvas',
   sourceFormat: 'json',
+  activeGroupId: null,
 
   setTool: (tool) => set({ tool }),
   setCamera: (camera) => set({ camera }),
@@ -182,12 +195,21 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setHoveredShapeId: (id) => set({ hoveredShapeId: id }),
   setConnectTargetId: (id) => set({ connectTargetId: id }),
   setReadOnly: (readOnly) => set({ readOnly }),
-  setPresentationOpen: (open) => set({ presentationOpen: open }),
+  setPresentationOpen: (open) =>
+    set(
+      open
+        ? { presentationOpen: true }
+        : { presentationOpen: false, presentationFlowActive: false, presentationFlowStep: 0, presentationFlowPath: [] },
+    ),
   setPresentationIndex: (index) => set({ presentationIndex: index }),
+  setPresentationFlowActive: (active) => set({ presentationFlowActive: active, presentationFlowStep: 0 }),
+  setPresentationFlowStep: (step) => set({ presentationFlowStep: step }),
+  setPresentationFlowPath: (path) => set({ presentationFlowPath: path }),
   setFormatPainterActive: (active) => set({ formatPainterActive: active }),
   setFormatPainterStyle: (style) => set({ formatPainterStyle: style }),
   setViewMode: (mode) => set({ viewMode: mode }),
   setSourceFormat: (format) => set({ sourceFormat: format }),
+  setActiveGroupId: (groupId) => set({ activeGroupId: groupId }),
 }));
 
 /** Recompute the camera so a zoom keeps the pivot point fixed on screen. */

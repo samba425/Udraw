@@ -6,6 +6,7 @@
  */
 import { ShapeLibrary } from './ShapeLibrary';
 import { LayersPanel } from '@/components/layers/LayersPanel';
+import { ElementsPanel } from '@/components/layers/ElementsPanel';
 
 /** The shape library + layers sidebar. */
 export function Sidebar(): React.JSX.Element {
@@ -15,6 +16,7 @@ export function Sidebar(): React.JSX.Element {
       aria-label="Shape library"
     >
       <ShapeLibrary />
+      <ElementsPanel />
       <LayersPanel />
     </aside>
   );

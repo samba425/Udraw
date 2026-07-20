@@ -21,10 +21,19 @@ import {
 import { resizeRect, type ResizeHandle } from '@/engine/selection/handles';
 import { hitTestShape } from '@/engine/selection/hitTest';
 import { anchorPoint, nearestAnchor } from '@/engine/routing/anchors';
+import { snapRoutingPoint } from '@/engine/routing/pointSnap';
+import { insertWaypointAtClick } from '@/engine/routing/waypoints';
 import { computeSnap, type SmartGuide } from '@/engine/snapping/snap';
 import { isShapeLocked, layerMap } from '@/models/layers';
-import { collectMovable, topAncestor } from '@/models/group';
+import { collectMovable, groupsAffectedByMove, syncGroupBoundsPatches, topAncestor } from '@/models/group';
+import { applyGroupDropMembership, isDescendantOf, selectionTarget } from '@/models/groupMembership';
+import {
+  groupChildSnapshots,
+  rotateGroupChildren,
+  scaleGroupChildren,
+} from '@/models/groupBundle';
 import { useHistory } from './useHistory';
+import { editorBus } from '@/utils/eventBus';
 import { openHyperlink } from '@/utils/links';
 import { applyFormatToShapes } from '@/engine/commands/formatPainter';
 
@@ -53,10 +62,26 @@ type Interaction =
   | { mode: 'marquee'; startWorld: Point; current: Rect }
   | { mode: 'move'; startWorld: Point; origins: Record<string, Point>; moved: boolean }
   | { mode: 'resize'; handle: ResizeHandle; original: Rect; id: string }
+  | {
+      mode: 'resize-group';
+      handle: ResizeHandle;
+      original: Rect;
+      id: string;
+      childSnapshots: Record<string, { x: number; y: number; width: number; height: number }>;
+    }
   | { mode: 'rotate'; center: Point; id: string; startAngle: number; original: number }
+  | {
+      mode: 'rotate-group';
+      center: Point;
+      id: string;
+      startAngle: number;
+      childSnapshots: Record<string, { x: number; y: number; width: number; height: number; rotation: number }>;
+    }
   | { mode: 'create'; startWorld: Point; kind: ShapeKind; id: string; moved: boolean }
   | { mode: 'connect'; source: EdgeEndpoint; from: Point }
   | { mode: 'reconnect'; edgeId: string; which: 'source' | 'target'; anchor: Point }
+  | { mode: 'waypoint'; edgeId: string; index: number; startWorld: Point; original: Point }
+  | { mode: 'label'; edgeId: string; startWorld: Point; originalOffset: Point }
   | { mode: 'pen'; points: Point[] }
   | { mode: 'erase'; erased: Set<string> };
 
@@ -79,6 +104,10 @@ export interface CanvasInteractions {
   onRotateHandleDown: (event: React.PointerEvent, shapeId: string) => void;
   onAnchorDown: (event: React.PointerEvent, shapeId: string, anchor: string) => void;
   onEndpointDown: (event: React.PointerEvent, edgeId: string, which: 'source' | 'target') => void;
+  onWaypointDown: (event: React.PointerEvent, edgeId: string, index: number) => void;
+  onLabelDown: (event: React.PointerEvent, edgeId: string) => void;
+  onShapeDoubleClick: (event: React.MouseEvent, shapeId: string) => void;
+  onEdgeDoubleClick: (event: React.MouseEvent, edgeId: string) => void;
 }
 
 /** Axis-aligned bounds of a shape. */
@@ -115,6 +144,23 @@ export function useCanvasInteractions(
     const { settings } = useProjectStore.getState().project;
     return settings.snapToGrid ? snapToStep(value, settings.gridSize) : value;
   }, []);
+
+  const snapPoint = useCallback(
+    (point: Point, excludeShapeIds?: Set<string>): { point: Point; guides: SmartGuide[] } => {
+      const project = useProjectStore.getState();
+      const page = project.activePage();
+      const { settings } = project.project;
+      const zoom = useEditorStore.getState().camera.zoom;
+      return snapRoutingPoint(point, page, {
+        gridSize: settings.gridSize,
+        snapToGrid: settings.snapToGrid,
+        snapToObjects: settings.snapToObjects,
+        zoom,
+        excludeShapeIds,
+      });
+    },
+    [],
+  );
 
   /** Turn a freehand world-space stroke into a normalized `freehand` shape. */
   const finalizePen = useCallback(
@@ -229,16 +275,36 @@ export function useCanvasInteractions(
         }
 
         project.updateShapes(patches);
+        const movedIds = Object.keys(patches);
+        const groupPatches = syncGroupBoundsPatches(
+          useProjectStore.getState().activePage(),
+          groupsAffectedByMove(page, movedIds),
+        );
+        if (Object.keys(groupPatches).length > 0) {
+          project.updateShapes(groupPatches);
+        }
         state.moved = true;
         break;
       }
       case 'resize':
         project.updateShape(state.id, resizeRect(state.original, state.handle, world, maybeSnap));
         break;
+      case 'resize-group': {
+        const newRect = resizeRect(state.original, state.handle, world, maybeSnap);
+        const childPatches = scaleGroupChildren(state.childSnapshots, state.original, newRect);
+        project.updateShapes({ [state.id]: newRect, ...childPatches });
+        break;
+      }
       case 'rotate': {
         const angle = Math.atan2(world.y - state.center.y, world.x - state.center.x);
         const deg = state.original + (angle - state.startAngle) * (180 / Math.PI);
         project.updateShape(state.id, { rotation: Math.round(deg) });
+        break;
+      }
+      case 'rotate-group': {
+        const angle = Math.atan2(world.y - state.center.y, world.x - state.center.x);
+        const deltaDeg = (angle - state.startAngle) * (180 / Math.PI);
+        project.updateShapes(rotateGroupChildren(state.childSnapshots, state.center, deltaDeg));
         break;
       }
       case 'create': {
@@ -252,24 +318,42 @@ export function useCanvasInteractions(
         state.moved = true;
         break;
       }
-      case 'connect':
-        setConnectPreview({ from: state.from, to: world });
-        {
-          const exclude = state.source.shapeId ? new Set([state.source.shapeId]) : undefined;
-          const hit = hitTestShape(project.activePage(), world, exclude);
-          setConnectTargetId(hit?.id ?? null);
-        }
+      case 'connect': {
+        const exclude = state.source.shapeId ? new Set([state.source.shapeId]) : undefined;
+        const snapped = snapPoint(world, exclude);
+        setConnectPreview({ from: state.from, to: snapped.point });
+        setGuides(snapped.guides);
+        const hit = hitTestShape(project.activePage(), snapped.point, exclude);
+        setConnectTargetId(hit?.id ?? null);
         break;
-      case 'reconnect':
-        setConnectPreview({ from: state.anchor, to: world });
-        {
-          const edge = project.activePage().edges[state.edgeId];
-          const otherId = state.which === 'source' ? edge?.target.shapeId : edge?.source.shapeId;
-          const exclude = otherId ? new Set([otherId]) : undefined;
-          const hit = hitTestShape(project.activePage(), world, exclude);
-          setConnectTargetId(hit?.id ?? null);
-        }
+      }
+      case 'reconnect': {
+        const edge = project.activePage().edges[state.edgeId];
+        const otherId = state.which === 'source' ? edge?.target.shapeId : edge?.source.shapeId;
+        const exclude = otherId ? new Set([otherId]) : undefined;
+        const snapped = snapPoint(world, exclude);
+        setConnectPreview({ from: state.anchor, to: snapped.point });
+        setGuides(snapped.guides);
+        const hit = hitTestShape(project.activePage(), snapped.point, exclude);
+        setConnectTargetId(hit?.id ?? null);
         break;
+      }
+      case 'waypoint': {
+        const snapped = snapPoint(world);
+        const waypoints = [...project.activePage().edges[state.edgeId]!.waypoints];
+        waypoints[state.index] = snapped.point;
+        project.updateEdge(state.edgeId, { waypoints });
+        setGuides(snapped.guides);
+        break;
+      }
+      case 'label': {
+        const dx = world.x - state.startWorld.x;
+        const dy = world.y - state.startWorld.y;
+        project.updateEdge(state.edgeId, {
+          labelOffset: { x: state.originalOffset.x + dx, y: state.originalOffset.y + dy },
+        });
+        break;
+      }
       case 'pen': {
         state.points.push(world);
         setPenPreview([...state.points]);
@@ -301,14 +385,22 @@ export function useCanvasInteractions(
         break;
       }
       case 'move':
-        if (state.moved) history.commit('Move');
-        else history.cancel();
+        if (state.moved) {
+          applyGroupDropMembership(Object.keys(state.origins));
+          history.commit('Move');
+        } else history.cancel();
         break;
       case 'resize':
         history.commit('Resize');
         break;
+      case 'resize-group':
+        history.commit('Resize group');
+        break;
       case 'rotate':
         history.commit('Rotate');
+        break;
+      case 'rotate-group':
+        history.commit('Rotate group');
         break;
       case 'create': {
         const shape = page.shapes[state.id];
@@ -322,7 +414,9 @@ export function useCanvasInteractions(
       }
       case 'connect': {
         const world = lastPointer.current;
-        const target = resolveEndpointAt(world, state.source.shapeId);
+        const exclude = state.source.shapeId ? new Set([state.source.shapeId]) : undefined;
+        const snapped = world ? snapPoint(world, exclude) : null;
+        const target = resolveEndpointAt(snapped?.point ?? world, state.source.shapeId);
         if (world && isDistinct(state.source, target)) {
           const edge = createEdge(
             { source: state.source, target },
@@ -341,13 +435,21 @@ export function useCanvasInteractions(
         const edge = page.edges[state.edgeId];
         if (edge && world) {
           const otherId = state.which === 'source' ? edge.target.shapeId : edge.source.shapeId;
-          const target = resolveEndpointAt(world, otherId);
+          const exclude = otherId ? new Set([otherId]) : undefined;
+          const snapped = snapPoint(world, exclude);
+          const target = resolveEndpointAt(snapped.point, otherId);
           history.run('Reconnect', () => project.updateEdge(state.edgeId, { [state.which]: target }));
         }
         setConnectPreview(null);
         setConnectTargetId(null);
         break;
       }
+      case 'waypoint':
+        history.commit('Move waypoint');
+        break;
+      case 'label':
+        history.commit('Move label');
+        break;
       case 'pen': {
         finalizePen(state.points);
         setPenPreview(null);
@@ -545,8 +647,8 @@ export function useCanvasInteractions(
 
       if (editor.tool !== 'select' || isShapeLocked(layerMap(page), shape)) return;
 
-      // Clicking a grouped child selects/moves the outermost group instead.
-      const targetId = topAncestor(page, shapeId);
+      // Select the group or a child when editing inside a group.
+      const targetId = selectionTarget(page, shapeId, editor.activeGroupId);
 
       let selected = editor.selectedIds;
       if (event.shiftKey) {
@@ -577,9 +679,21 @@ export function useCanvasInteractions(
   const onResizeHandleDown = useCallback(
     (event: React.PointerEvent, handle: ResizeHandle, shapeId: string) => {
       event.stopPropagation();
-      const shape = useProjectStore.getState().activePage().shapes[shapeId];
+      const page = useProjectStore.getState().activePage();
+      const shape = page.shapes[shapeId];
       if (!shape) return;
-      interaction.current = { mode: 'resize', handle, original: shapeRect(shape), id: shapeId };
+      const rect = shapeRect(shape);
+      if (shape.kind === 'group') {
+        interaction.current = {
+          mode: 'resize-group',
+          handle,
+          original: rect,
+          id: shapeId,
+          childSnapshots: groupChildSnapshots(page, shapeId),
+        };
+      } else {
+        interaction.current = { mode: 'resize', handle, original: rect, id: shapeId };
+      }
       history.begin();
       startListening();
     },
@@ -589,17 +703,29 @@ export function useCanvasInteractions(
   const onRotateHandleDown = useCallback(
     (event: React.PointerEvent, shapeId: string) => {
       event.stopPropagation();
-      const shape = useProjectStore.getState().activePage().shapes[shapeId];
+      const page = useProjectStore.getState().activePage();
+      const shape = page.shapes[shapeId];
       if (!shape) return;
       const center = { x: shape.x + shape.width / 2, y: shape.y + shape.height / 2 };
       const world = clientToWorld(event.clientX, event.clientY);
-      interaction.current = {
-        mode: 'rotate',
-        center,
-        id: shapeId,
-        startAngle: Math.atan2(world.y - center.y, world.x - center.x),
-        original: shape.rotation,
-      };
+      const startAngle = Math.atan2(world.y - center.y, world.x - center.x);
+      if (shape.kind === 'group') {
+        interaction.current = {
+          mode: 'rotate-group',
+          center,
+          id: shapeId,
+          startAngle,
+          childSnapshots: groupChildSnapshots(page, shapeId),
+        };
+      } else {
+        interaction.current = {
+          mode: 'rotate',
+          center,
+          id: shapeId,
+          startAngle,
+          original: shape.rotation,
+        };
+      }
       history.begin();
       startListening();
     },
@@ -634,9 +760,109 @@ export function useCanvasInteractions(
       interaction.current = { mode: 'reconnect', edgeId, which, anchor };
       lastPointer.current = clientToWorld(event.clientX, event.clientY);
       setConnectPreview({ from: anchor, to: lastPointer.current });
+      history.begin();
       startListening();
     },
-    [clientToWorld, setConnectPreview, startListening],
+    [clientToWorld, history, setConnectPreview, startListening],
+  );
+
+  const onWaypointDown = useCallback(
+    (event: React.PointerEvent, edgeId: string, index: number) => {
+      event.stopPropagation();
+      const page = useProjectStore.getState().activePage();
+      const edge = page.edges[edgeId];
+      if (!edge) return;
+      if (event.altKey) {
+        history.run('Remove waypoint', () => {
+          const waypoints = [...edge.waypoints];
+          waypoints.splice(index, 1);
+          useProjectStore.getState().updateEdge(edgeId, { waypoints });
+        });
+        return;
+      }
+      const world = clientToWorld(event.clientX, event.clientY);
+      lastPointer.current = world;
+      interaction.current = {
+        mode: 'waypoint',
+        edgeId,
+        index,
+        startWorld: world,
+        original: edge.waypoints[index] ?? world,
+      };
+      history.begin();
+      startListening();
+    },
+    [clientToWorld, history, startListening],
+  );
+
+  const onLabelDown = useCallback(
+    (event: React.PointerEvent, edgeId: string) => {
+      event.stopPropagation();
+      const edge = useProjectStore.getState().activePage().edges[edgeId];
+      if (!edge) return;
+      const world = clientToWorld(event.clientX, event.clientY);
+      lastPointer.current = world;
+      interaction.current = {
+        mode: 'label',
+        edgeId,
+        startWorld: world,
+        originalOffset: edge.labelOffset ?? { x: 0, y: 0 },
+      };
+      history.begin();
+      startListening();
+    },
+    [clientToWorld, history, startListening],
+  );
+
+  const onShapeDoubleClick = useCallback(
+    (event: React.MouseEvent, shapeId: string) => {
+      event.stopPropagation();
+      if (readOnly) return;
+      const editor = useEditorStore.getState();
+      if (editor.tool !== 'select') return;
+      const page = useProjectStore.getState().activePage();
+      const shape = page.shapes[shapeId];
+      if (!shape) return;
+
+      if (shape.kind === 'group' && editor.activeGroupId !== shapeId) {
+        editor.setActiveGroupId(shapeId);
+        editor.select([shapeId]);
+        editorBus.emit('toast', { message: 'Inside group — Esc to exit.', kind: 'info' });
+        return;
+      }
+
+      if (editor.activeGroupId && isDescendantOf(page, shapeId, editor.activeGroupId)) {
+        editor.setEditingText(shapeId);
+        return;
+      }
+
+      if (shape.kind !== 'group') {
+        editor.setEditingText(shapeId);
+      }
+    },
+    [readOnly],
+  );
+
+  const onEdgeDoubleClick = useCallback(
+    (event: React.MouseEvent, edgeId: string) => {
+      if (readOnly) return;
+      const editor = useEditorStore.getState();
+      if (editor.tool !== 'select') return;
+      const page = useProjectStore.getState().activePage();
+      const edge = page.edges[edgeId];
+      if (!edge) return;
+      const rect = svgRef.current?.getBoundingClientRect();
+      const camera = editor.camera;
+      const world = screenToWorld(
+        { x: event.clientX - (rect?.left ?? 0), y: event.clientY - (rect?.top ?? 0) },
+        camera,
+      );
+      const waypoints = insertWaypointAtClick(edge, page, world);
+      history.run('Add waypoint', () => {
+        useProjectStore.getState().updateEdge(edgeId, { waypoints });
+      });
+    },
+    [history, readOnly, svgRef],
   );
 
   return {
@@ -647,6 +873,10 @@ export function useCanvasInteractions(
     onRotateHandleDown,
     onAnchorDown,
     onEndpointDown,
+    onWaypointDown,
+    onLabelDown,
+    onShapeDoubleClick,
+    onEdgeDoubleClick,
   };
 }
 

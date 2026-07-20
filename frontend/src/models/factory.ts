@@ -83,7 +83,9 @@ export function createEdge(init: EdgeInit, layerId: string): Edge {
     locked: init.locked ?? false,
     hidden: init.hidden ?? false,
     layerId: init.layerId ?? layerId,
+    groupId: init.groupId,
     waypoints: init.waypoints ?? [],
+    labelOffset: init.labelOffset,
   };
 }
 

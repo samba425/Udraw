@@ -9,9 +9,13 @@ import type { Point, Shape } from '@/types';
 import { useProjectStore } from '@/state/projectStore';
 import { useEditorStore } from '@/state/editorStore';
 import { useHistoryStore } from '@/state/historyStore';
-import { createId, createShape } from '@/models/factory';
+import { createShape } from '@/models/factory';
 import { descendants } from '@/models/group';
+import { GROUP_BORDER_STROKE } from '@/models/groupMembership';
+import { adoptShapeIntoGroup } from '@/models/groupMembership';
+import { bundleFromSelection, cloneBundle, edgesForGroup, expandCascadeIds, internalEdgesForShapes, reorderBlock } from '@/models/groupBundle';
 import { boundingBox } from '@/utils/geometry';
+import { editorBus } from '@/utils/eventBus';
 import { alignShapes, distributeShapes, type AlignMode, type DistributeMode } from '@/engine/alignment/align';
 import type { LibraryIcon } from '@/shapes/registry';
 
@@ -34,19 +38,18 @@ export function deleteSelection(): void {
   });
 }
 
-/** Duplicate the selected shapes with a small offset and select the copies. */
+/** Duplicate the selected shapes (and group contents) with a small offset. */
 export function duplicateSelection(offset = 16): void {
-  const shapes = selectedShapes();
-  if (shapes.length === 0) return;
-  const clones = shapes.map((s) => ({
-    ...structuredClone(s),
-    id: createId('shape'),
-    x: s.x + offset,
-    y: s.y + offset,
-  }));
+  const page = useProjectStore.getState().activePage();
+  const ids = useEditorStore.getState().selectedIds;
+  const bundle = bundleFromSelection(page, ids);
+  if (bundle.shapes.length === 0) return;
+  const cloned = cloneBundle(bundle, { x: offset, y: offset });
   useHistoryStore.getState().run('Duplicate', () => {
-    useProjectStore.getState().addShapes(clones);
-    useEditorStore.getState().select(clones.map((c) => c.id));
+    const store = useProjectStore.getState();
+    store.addShapes(cloned.shapes);
+    store.addEdges(cloned.edges);
+    useEditorStore.getState().select(cloned.selectIds);
   });
 }
 
@@ -75,33 +78,48 @@ export function distributeSelection(mode: DistributeMode): void {
   useHistoryStore.getState().run('Distribute', () => useProjectStore.getState().updateShapes(patch));
 }
 
-/** Change z-order for the (single) selection. */
+/** Change z-order for the selection; groups move with all members + edges. */
 export function reorderSelection(direction: 'front' | 'back' | 'forward' | 'backward'): void {
   const ids = useEditorStore.getState().selectedIds;
   if (ids.length === 0) return;
   useHistoryStore.getState().run('Reorder', () => {
-    for (const id of ids) useProjectStore.getState().reorder(id, direction);
+    const store = useProjectStore.getState();
+    const page = store.activePage();
+    const { shapeIds, edgeIds } = expandCascadeIds(page, ids);
+    const blockIds = new Set([...shapeIds, ...edgeIds]);
+    const nextOrder = reorderBlock(page.order, blockIds, direction);
+    store.setPageOrder(nextOrder);
   });
 }
 
-/** Lock or unlock the selected shapes. */
+/** Lock or unlock the selected shapes (cascades into groups). */
 export function setSelectionLocked(locked: boolean): void {
   const ids = useEditorStore.getState().selectedIds;
   if (ids.length === 0) return;
-  const patches = Object.fromEntries(ids.map((id) => [id, { locked }]));
-  useHistoryStore.getState().run(locked ? 'Lock' : 'Unlock', () =>
-    useProjectStore.getState().updateShapes(patches),
-  );
+  const page = useProjectStore.getState().activePage();
+  const { shapeIds, edgeIds } = expandCascadeIds(page, ids);
+  const shapePatches = Object.fromEntries(shapeIds.map((id) => [id, { locked }]));
+  const edgePatches = Object.fromEntries(edgeIds.map((id) => [id, { locked }]));
+  useHistoryStore.getState().run(locked ? 'Lock' : 'Unlock', () => {
+    const store = useProjectStore.getState();
+    store.updateShapes(shapePatches);
+    store.updateEdges(edgePatches);
+  });
 }
 
-/** Show or hide the selected shapes. */
+/** Show or hide the selected shapes (cascades into groups). */
 export function setSelectionHidden(hidden: boolean): void {
   const ids = useEditorStore.getState().selectedIds;
   if (ids.length === 0) return;
-  const patches = Object.fromEntries(ids.map((id) => [id, { hidden }]));
-  useHistoryStore.getState().run(hidden ? 'Hide' : 'Show', () =>
-    useProjectStore.getState().updateShapes(patches),
-  );
+  const page = useProjectStore.getState().activePage();
+  const { shapeIds, edgeIds } = expandCascadeIds(page, ids);
+  const shapePatches = Object.fromEntries(shapeIds.map((id) => [id, { hidden }]));
+  const edgePatches = Object.fromEntries(edgeIds.map((id) => [id, { hidden }]));
+  useHistoryStore.getState().run(hidden ? 'Hide' : 'Show', () => {
+    const store = useProjectStore.getState();
+    store.updateShapes(shapePatches);
+    store.updateEdges(edgePatches);
+  });
 }
 
 /**
@@ -110,7 +128,7 @@ export function setSelectionHidden(hidden: boolean): void {
  * everything else becomes an `icon` shape referencing the library id. The new
  * shape is selected and recorded as a single history step.
  */
-export function placeLibraryIcon(icon: LibraryIcon, center: Point): void {
+export function placeLibraryIcon(icon: LibraryIcon, center: Point, options?: { parentGroupId?: string }): void {
   const project = useProjectStore.getState();
   const page = project.activePage();
   const layerId = page.layers[0]!.id;
@@ -132,8 +150,11 @@ export function placeLibraryIcon(icon: LibraryIcon, center: Point): void {
           ...base,
           kind: icon.shapeKind,
           text: icon.defaultText ?? '',
-          ...(icon.defaultFill ? { fill: { type: 'solid' as const, color: icon.defaultFill } } : {}),
-          ...(icon.defaultStroke ? { stroke: icon.defaultStroke } : {}),
+          fill: icon.defaultFill
+            ? { type: 'solid' as const, color: icon.defaultFill }
+            : { type: 'none' as const, color: 'none' },
+          stroke: icon.defaultStroke ?? '#475569',
+          strokeWidth: icon.defaultStroke ? 2 : 1.5,
         },
         layerId,
         index,
@@ -153,6 +174,7 @@ export function placeLibraryIcon(icon: LibraryIcon, center: Point): void {
 
   useHistoryStore.getState().run('Add shape', () => {
     project.addShape(shape);
+    if (options?.parentGroupId) adoptShapeIntoGroup(shape.id, options.parentGroupId);
     useEditorStore.getState().select([shape.id]);
   });
 }
@@ -164,15 +186,42 @@ export function selectAll(): void {
 }
 
 /** Group the selected shapes under a new group container shape. */
-export function groupSelection(): void {
-  const shapes = selectedShapes();
-  if (shapes.length < 2) return;
+export function groupSelection(options?: { name?: string; showBorder?: boolean; prompt?: boolean }): void {
+  const shapes = selectedShapes().filter((s) => s.kind !== 'group');
+  if (shapes.length < 2) {
+    editorBus.emit('toast', {
+      message: 'Select at least 2 shapes to group (Ctrl+G).',
+      kind: 'info',
+    });
+    return;
+  }
   const box = boundingBox(shapes.map((s) => ({ x: s.x, y: s.y, width: s.width, height: s.height })));
   if (!box) return;
 
+  let name = options?.name ?? 'Group';
+  let showBorder = options?.showBorder ?? false;
+  if (options?.prompt !== false) {
+    const prompted = window.prompt('Group name (optional)', 'Group');
+    if (prompted === null) return;
+    name = prompted.trim();
+    showBorder = window.confirm('Show a dashed border around this group?');
+  }
+
   const page = useProjectStore.getState().activePage();
   const group = createShape(
-    { kind: 'group', x: box.x, y: box.y, width: box.width, height: box.height, fill: { type: 'none', color: 'none' }, stroke: 'none', strokeWidth: 0 },
+    {
+      kind: 'group',
+      x: box.x,
+      y: box.y,
+      width: box.width,
+      height: box.height,
+      text: name.trim(),
+      fill: { type: 'none', color: 'none' },
+      stroke: showBorder ? GROUP_BORDER_STROKE : 'none',
+      strokeWidth: showBorder ? 1.5 : 0,
+      dash: showBorder ? 'dashed' : 'solid',
+      metadata: { showBorder },
+    },
     page.layers[0]!.id,
   );
 
@@ -181,8 +230,23 @@ export function groupSelection(): void {
     store.addShape(group);
     const patches = Object.fromEntries(shapes.map((s) => [s.id, { parentId: group.id }]));
     store.updateShapes(patches);
+    const shapeIds = new Set(shapes.map((s) => s.id));
+    for (const edge of internalEdgesForShapes(store.activePage(), shapeIds)) {
+      store.updateEdge(edge.id, { groupId: group.id });
+    }
     useEditorStore.getState().select([group.id]);
   });
+  const edgeCount = internalEdgesForShapes(page, new Set(shapes.map((s) => s.id))).length;
+  editorBus.emit('toast', {
+    message: edgeCount > 0 ? `Grouped ${shapes.length} shapes and ${edgeCount} connectors.` : `Grouped ${shapes.length} shapes.`,
+    kind: 'success',
+  });
+}
+
+/** True when the current selection includes at least one group. */
+export function selectionHasGroup(): boolean {
+  const page = useProjectStore.getState().activePage();
+  return useEditorStore.getState().selectedIds.some((id) => page.shapes[id]?.kind === 'group');
 }
 
 /** Ungroup the selected group(s), detaching children and removing containers. */
@@ -192,7 +256,10 @@ export function ungroupSelection(): void {
     .getState()
     .selectedIds.map((id) => page.shapes[id])
     .filter((s): s is Shape => s?.kind === 'group');
-  if (groups.length === 0) return;
+  if (groups.length === 0) {
+    editorBus.emit('toast', { message: 'Select a group to ungroup (Ctrl+Shift+G).', kind: 'info' });
+    return;
+  }
 
   useHistoryStore.getState().run('Ungroup', () => {
     const store = useProjectStore.getState();
@@ -205,9 +272,13 @@ export function ungroupSelection(): void {
           .map((id) => [id, { parentId: undefined }]),
       );
       store.updateShapes(patches);
+      for (const edge of edgesForGroup(store.activePage(), group.id)) {
+        store.updateEdge(edge.id, { groupId: undefined });
+      }
       freed.push(...Object.keys(patches));
       store.removeElements([group.id]);
     }
     useEditorStore.getState().select(freed);
   });
+  editorBus.emit('toast', { message: 'Group dissolved.', kind: 'success' });
 }

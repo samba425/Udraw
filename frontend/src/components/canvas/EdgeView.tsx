@@ -12,8 +12,10 @@ interface EdgeViewProps {
   edge: Edge;
   page: Page;
   selected: boolean;
+  flowHighlighted?: boolean;
+  flowDimmed?: boolean;
   onPointerDown: (event: React.PointerEvent, edgeId: string) => void;
-  onDoubleClick: (edgeId: string) => void;
+  onDoubleClick: (event: React.MouseEvent, edgeId: string) => void;
 }
 
 /** SVG marker refs for a given arrow style, or undefined for `none`. */
@@ -27,18 +29,22 @@ export const EdgeView = memo(function EdgeView({
   edge,
   page,
   selected,
+  flowHighlighted = false,
+  flowDimmed = false,
   onPointerDown,
   onDoubleClick,
 }: EdgeViewProps): React.JSX.Element | null {
   if (edge.hidden) return null;
   const routed = routeEdge(edge, page);
   const dash = dashArray(edge.dash, edge.strokeWidth);
+  const labelOffset = edge.labelOffset ?? { x: 0, y: 0 };
+  const opacity = flowDimmed ? edge.opacity * 0.2 : edge.opacity;
 
   return (
     <g
-      opacity={edge.opacity}
+      opacity={opacity}
       onPointerDown={(e) => onPointerDown(e, edge.id)}
-      onDoubleClick={() => onDoubleClick(edge.id)}
+      onDoubleClick={(e) => onDoubleClick(e, edge.id)}
       data-edge-id={edge.id}
       style={{ cursor: 'pointer' }}
     >
@@ -53,8 +59,8 @@ export const EdgeView = memo(function EdgeView({
       <path
         d={routed.path}
         fill="none"
-        stroke={edge.stroke}
-        strokeWidth={edge.strokeWidth}
+        stroke={flowHighlighted ? 'var(--color-accent, #7c3aed)' : edge.stroke}
+        strokeWidth={flowHighlighted ? edge.strokeWidth + 2 : edge.strokeWidth}
         strokeDasharray={edge.animated ? `${edge.strokeWidth * 4} ${edge.strokeWidth * 3}` : dash}
         strokeLinejoin="round"
         strokeLinecap="round"
@@ -84,7 +90,10 @@ export const EdgeView = memo(function EdgeView({
       )}
 
       {edge.label && (
-        <g transform={`translate(${routed.mid.x} ${routed.mid.y})`} pointerEvents="none">
+        <g
+          transform={`translate(${routed.mid.x + labelOffset.x} ${routed.mid.y + labelOffset.y})`}
+          pointerEvents="none"
+        >
           <rect x={-labelWidth(edge.label) / 2} y={-11} width={labelWidth(edge.label)} height={22} rx={4} fill="var(--color-surface)" opacity={0.9} />
           <text textAnchor="middle" dominantBaseline="middle" fontSize={12} fill="var(--color-text)">
             {edge.label}

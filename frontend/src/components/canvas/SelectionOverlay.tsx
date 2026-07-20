@@ -26,8 +26,7 @@ export const SelectionOverlay = memo(function SelectionOverlay({
 }: SelectionOverlayProps): React.JSX.Element | null {
   if (shapes.length === 0) return null;
   const handleSize = 9 / zoom;
-  // Groups show a bounding box but no resize/rotate handles (children own size).
-  const single = shapes.length === 1 && shapes[0]!.kind !== 'group' ? shapes[0]! : null;
+  const single = shapes.length === 1 ? shapes[0]! : null;
 
   return (
     <g pointerEvents="all">

@@ -40,8 +40,12 @@ export interface Edge {
   locked: boolean;
   hidden: boolean;
   layerId: string;
+  /** When set, the edge moves/deletes/copies with this group container. */
+  groupId?: string;
   /** Optional user-defined waypoints for manual routing. */
   waypoints: Point[];
+  /** Pixel offset of the label from the path midpoint. */
+  labelOffset?: Point;
 }
 
 /** Subset used when creating edges. */

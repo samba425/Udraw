@@ -4,7 +4,7 @@
  * @module components/toolbar/FileMenu
  */
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, FileDown, FilePlus2, FileUp, LayoutTemplate, Link2, Pencil, Workflow } from 'lucide-react';
+import { ChevronDown, FileDown, FilePlus2, FileUp, BookmarkPlus, LayoutTemplate, Link2, Pencil, Workflow } from 'lucide-react';
 import { editorBus } from '@/utils/eventBus';
 import { useProjectStore } from '@/state/projectStore';
 import { useHistoryStore } from '@/state/historyStore';
@@ -13,6 +13,7 @@ import { createProject } from '@/models/factory';
 import { pluginManager } from '@/plugins/registry';
 import { exportWithPlugin } from '@/services/export';
 import { copyShareLink, copyViewOnlyShareLink } from '@/services/share/urlShare';
+import { saveActivePageAsTemplate } from '@/services/templates/userTemplates';
 
 interface MenuItem {
   label: string;
@@ -60,6 +61,18 @@ export function FileMenu(): React.JSX.Element {
       label: 'Browse templates...',
       icon: LayoutTemplate,
       action: () => setTemplatesOpen(true),
+    },
+    {
+      label: 'Save page as template...',
+      icon: BookmarkPlus,
+      action: () => {
+        const page = useProjectStore.getState().activePage();
+        const title = window.prompt('Template name', page.name);
+        if (!title?.trim()) return;
+        const description = window.prompt('Description (optional)', `Saved from ${page.name}`) ?? '';
+        saveActivePageAsTemplate(title.trim(), description);
+        editorBus.emit('toast', { message: `Saved “${title.trim()}” to My templates.`, kind: 'success' });
+      },
     },
     {
       label: 'Copy share link',

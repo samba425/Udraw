@@ -16,6 +16,7 @@ import { useEditorStore } from '@/state/editorStore';
 import { useProjectStore } from '@/state/projectStore';
 import { PanelSection } from '@/components/ui/Panel';
 import { ShapeProperties } from './ShapeProperties';
+import { GroupProperties } from './GroupProperties';
 import { EdgeProperties } from './EdgeProperties';
 import { alignSelection, distributeSelection } from '@/engine/commands/actions';
 import type { AlignMode } from '@/engine/alignment/align';
@@ -46,7 +47,8 @@ export function PropertyPanel(): React.JSX.Element {
       className="df-scroll flex w-64 shrink-0 flex-col overflow-y-auto border-l bordered surface"
       aria-label="Properties"
     >
-      {shape && <ShapeProperties shape={shape} />}
+      {shape && shape.kind === 'group' && <GroupProperties shape={shape} />}
+      {shape && shape.kind !== 'group' && <ShapeProperties shape={shape} />}
       {edge && <EdgeProperties edge={edge} />}
 
       {multi && (

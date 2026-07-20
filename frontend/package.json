@@ -1,14 +1,17 @@
 {
-  "name": "@diagramforge/react",
+  "name": "@samba425/diagramforge-react",
   "private": false,
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "description": "Embeddable offline-first diagram editor for React — a draw.io alternative.",
   "author": "samba425 <asiva325@gmail.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/samba425/Udraw.git",
+    "url": "git+https://github.com/samba425/Udraw.git",
     "directory": "frontend"
   },
   "keywords": [
@@ -32,6 +35,7 @@
   "module": "./dist/diagramforge.js",
   "types": "./dist/index.d.ts",
   "files": [
+    "README.md",
     "dist/diagramforge.js",
     "dist/diagramforge.umd.cjs",
     "dist/diagramforge.css",
